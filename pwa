@@ -1,9 +1,24 @@
+
+// File: App.js (Complete PWA Implementation)
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
 
-// Loading Spinner Component
+// ======================== PWA Service Worker Setup ========================
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(registration => {
+        console.log('SW registered: ', registration);
+      }).catch(registrationError => {
+        console.log('SW registration failed: ', registrationError);
+      });
+    });
+  }
+}
+
+// ======================== Components ========================
 function LoadingSpinner() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
@@ -19,7 +34,6 @@ function LoadingSpinner() {
   );
 }
 
-// Shoe Model Component
 function ShoeModel({ config }) {
   const meshRef = useRef();
   const upperRef = useRef();
@@ -31,17 +45,12 @@ function ShoeModel({ config }) {
     }
   });
 
-  // Create shoe geometry based on type
   const getShoeGeometry = (type) => {
     switch (type) {
-      case 'boot':
-        return { upper: [2, 1.2, 4], sole: [2.2, 0.4, 4.2] };
-      case 'dress':
-        return { upper: [1.8, 0.7, 4.2], sole: [2, 0.2, 4.4] };
-      case 'casual':
-        return { upper: [2.1, 0.9, 3.8], sole: [2.3, 0.3, 4] };
-      default: // sneaker
-        return { upper: [2, 0.8, 4], sole: [2.2, 0.3, 4.2] };
+      case 'boot': return { upper: [2, 1.2, 4], sole: [2.2, 0.4, 4.2] };
+      case 'dress': return { upper: [1.8, 0.7, 4.2], sole: [2, 0.2, 4.4] };
+      case 'casual': return { upper: [2.1, 0.9, 3.8], sole: [2.3, 0.3, 4] };
+      default: return { upper: [2, 0.8, 4], sole: [2.2, 0.3, 4.2] };
     }
   };
 
@@ -49,7 +58,6 @@ function ShoeModel({ config }) {
 
   return (
     <group ref={meshRef} dispose={null}>
-      {/* Upper part of the shoe */}
       <mesh ref={upperRef} position={[0, 0, 0]}>
         <boxGeometry args={geometry.upper} />
         <meshStandardMaterial 
@@ -59,16 +67,11 @@ function ShoeModel({ config }) {
         />
       </mesh>
       
-      {/* Sole part of the shoe */}
       <mesh ref={soleRef} position={[0, -0.5, 0]}>
         <boxGeometry args={geometry.sole} />
-        <meshStandardMaterial 
-          color={config.secondaryColor}
-          roughness={0.9}
-        />
+        <meshStandardMaterial color={config.secondaryColor} roughness={0.9} />
       </mesh>
       
-      {/* Laces for sneakers and casual shoes */}
       {(config.type === 'sneaker' || config.type === 'casual') && (
         <>
           <mesh position={[0, 0.2, 1.5]}>
@@ -89,7 +92,6 @@ function ShoeModel({ config }) {
   );
 }
 
-// 3D Shoe Customizer Component
 function ShoeCustomizer({ config }) {
   return (
     <div className="w-full h-96 rounded-xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-50 to-gray-100">
@@ -99,39 +101,17 @@ function ShoeCustomizer({ config }) {
         gl={{ antialias: true }}
       >
         <ambientLight intensity={0.4} />
-        <directionalLight 
-          position={[10, 10, 5]} 
-          intensity={1}
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-        />
+        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
         <pointLight position={[-10, -10, -10]} intensity={0.2} />
-        
         <ShoeModel config={config} />
-        
-        <ContactShadows 
-          position={[0, -1, 0]} 
-          opacity={0.4} 
-          scale={10} 
-          blur={2.5} 
-          far={4.5} 
-        />
-        
+        <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={10} blur={2.5} />
         <Environment preset="studio" />
-        
-        <OrbitControls 
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
-          minDistance={3}
-          maxDistance={15}
-        />
+        <OrbitControls enablePan enableZoom enableRotate minDistance={3} maxDistance={15} />
       </Canvas>
     </div>
   );
 }
 
-// Control Panel Component
 function ControlPanel({ config, onChange }) {
   const handleChange = (e) => {
     const { name, value, type } = e.target;
@@ -151,7 +131,7 @@ function ControlPanel({ config, onChange }) {
             name="type"
             value={config.type} 
             onChange={handleChange}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="sneaker">Sneaker</option>
             <option value="boot">Boot</option>
@@ -192,7 +172,7 @@ function ControlPanel({ config, onChange }) {
           <label className="block text-sm font-medium text-gray-700 mb-3">Material:</label>
           <div className="grid grid-cols-3 gap-3">
             {['leather', 'canvas', 'synthetic'].map(material => (
-              <label key={material} className="flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <label key={material} className="flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50">
                 <input
                   type="radio"
                   name="material"
@@ -233,7 +213,7 @@ function ControlPanel({ config, onChange }) {
   );
 }
 
-// Main App Component
+// ======================== Main App Component ========================
 export default function App() {
   const [shoeConfig, setShoeConfig] = useState({
     type: 'sneaker',
@@ -244,15 +224,50 @@ export default function App() {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
-    // Simulate loading time for better UX
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
+    // Register service worker
+    registerServiceWorker();
 
-    return () => clearTimeout(timer);
+    // Handle installation prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    });
+
+    // Handle network status
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Simulate loading
+    const timer = setTimeout(() => setIsLoading(false), 2000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearTimeout(timer);
+    };
   }, []);
+
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('User accepted install');
+        } else {
+          console.log('User dismissed install');
+        }
+        setDeferredPrompt(null);
+      });
+    }
+  };
 
   const handleConfigChange = (newConfig) => {
     setShoeConfig(prev => ({ ...prev, ...newConfig }));
@@ -264,6 +279,28 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50">
+      {/* PWA Installation Banner */}
+      {isInstallable && (
+        <div className="bg-indigo-600 text-white p-3 text-center">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <span>Install this app for a better experience</span>
+            <button 
+              onClick={handleInstallClick}
+              className="ml-4 px-4 py-2 bg-white text-indigo-600 rounded-lg font-medium"
+            >
+              Install
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Offline Notification */}
+      {isOffline && (
+        <div className="bg-yellow-500 text-white p-3 text-center">
+          You are currently offline. Some features may be limited.
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -281,15 +318,10 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Control Panel */}
           <div className="lg:col-span-1">
-            <ControlPanel 
-              config={shoeConfig}
-              onChange={handleConfigChange}
-            />
+            <ControlPanel config={shoeConfig} onChange={handleConfigChange} />
           </div>
           
-          {/* 3D Viewer */}
           <div className="lg:col-span-2">
             <div className="space-y-4">
               <Suspense fallback={
@@ -300,7 +332,6 @@ export default function App() {
                 <ShoeCustomizer config={shoeConfig} />
               </Suspense>
               
-              {/* Controls Info */}
               <div className="bg-white rounded-lg p-4 shadow-sm">
                 <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
                   <div className="flex items-center space-x-2">
@@ -326,31 +357,108 @@ export default function App() {
       <footer className="bg-white border-t mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center text-gray-600">
-            <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer. Built with React & Three.js</p>
+            <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer PWA</p>
           </div>
         </div>
       </footer>
 
-      {/* Custom Styles */}
-      <style jsx>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #4f46e5;
-          cursor: pointer;
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #4f46e5;
-          cursor: pointer;
-          border: none;
-        }
-      `}</style>
+      {/* Service Worker Registration */}
+      <script dangerouslySetInnerHTML={{
+        __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                console.log('ServiceWorker registration successful');
+              }, function(err) {
+                console.log('ServiceWorker registration failed: ', err);
+              });
+            });
+          }
+        `
+      }} />
+
+      {/* Manifest Link */}
+      <link rel="manifest" href="/manifest.json" />
     </div>
   );
+}
+
+// ======================== Service Worker (sw.js) ========================
+// This would normally be in a separate file, but included here for completeness
+const CACHE_NAME = 'shoe-customizer-v1';
+const ASSETS_TO_CACHE = [
+  '/',
+  '/index.html',
+  '/static/js/main.chunk.js',
+  '/static/css/main.chunk.css',
+  '/manifest.json',
+  '/favicon.ico'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(ASSETS_TO_CACHE))
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => response || fetch(event.request))
+  );
+});
+
+{
+  "short_name": "Shoe Customizer",
+  "name": "3D Shoe Customizer PWA",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary"
+}
+
+{
+  "short_name": "Shoe Customizer",
+  "name": "3D Shoe Customizer PWA",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "kahiga.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary"
 }
