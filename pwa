@@ -1,53 +1,87 @@
-// src/components/ShoeCustomizer.js
-import React, { useRef } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows, useGLTF } from '@react-three/drei';
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
 
+// Loading Spinner Component
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
+      <div className="text-center">
+        <div className="inline-flex space-x-2 mb-4">
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce"></div>
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+        </div>
+        <p className="text-gray-600 text-lg">Loading 3D Shoe Customizer...</p>
+      </div>
+    </div>
+  );
+}
+
+// Shoe Model Component
 function ShoeModel({ config }) {
   const meshRef = useRef();
-  const { nodes, materials } = useGLTF('/assets/models/shoe.glb');
+  const upperRef = useRef();
+  const soleRef = useRef();
   
   useFrame((state, delta) => {
     if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.1;
+      meshRef.current.rotation.y += delta * 0.2;
     }
   });
 
+  // Create shoe geometry based on type
+  const getShoeGeometry = (type) => {
+    switch (type) {
+      case 'boot':
+        return { upper: [2, 1.2, 4], sole: [2.2, 0.4, 4.2] };
+      case 'dress':
+        return { upper: [1.8, 0.7, 4.2], sole: [2, 0.2, 4.4] };
+      case 'casual':
+        return { upper: [2.1, 0.9, 3.8], sole: [2.3, 0.3, 4] };
+      default: // sneaker
+        return { upper: [2, 0.8, 4], sole: [2.2, 0.3, 4.2] };
+    }
+  };
+
+  const geometry = getShoeGeometry(config.type);
+
   return (
     <group ref={meshRef} dispose={null}>
-      {nodes ? (
+      {/* Upper part of the shoe */}
+      <mesh ref={upperRef} position={[0, 0, 0]}>
+        <boxGeometry args={geometry.upper} />
+        <meshStandardMaterial 
+          color={config.primaryColor}
+          roughness={config.material === 'leather' ? 0.8 : config.material === 'canvas' ? 0.9 : 0.2}
+          metalness={config.material === 'synthetic' ? 0.3 : 0.1}
+        />
+      </mesh>
+      
+      {/* Sole part of the shoe */}
+      <mesh ref={soleRef} position={[0, -0.5, 0]}>
+        <boxGeometry args={geometry.sole} />
+        <meshStandardMaterial 
+          color={config.secondaryColor}
+          roughness={0.9}
+        />
+      </mesh>
+      
+      {/* Laces for sneakers and casual shoes */}
+      {(config.type === 'sneaker' || config.type === 'casual') && (
         <>
-          <mesh geometry={nodes.upper.geometry}>
-            <meshStandardMaterial 
-              color={config.primaryColor}
-              roughness={config.material === 'leather' ? 0.8 : 0.2}
-              metalness={config.material === 'synthetic' ? 0.3 : 0.1}
-            />
+          <mesh position={[0, 0.2, 1.5]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
           </mesh>
-          <mesh geometry={nodes.sole.geometry}>
-            <meshStandardMaterial 
-              color={config.secondaryColor}
-              roughness={0.9}
-            />
+          <mesh position={[0, 0.2, 1]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
           </mesh>
-        </>
-      ) : (
-        <>
-          <mesh position={[0, 0, 0]}>
-            <boxGeometry args={[2, 0.8, 4]} />
-            <meshStandardMaterial 
-              color={config.primaryColor}
-              roughness={config.material === 'leather' ? 0.8 : 0.2}
-              metalness={config.material === 'synthetic' ? 0.3 : 0.1}
-            />
-          </mesh>
-          <mesh position={[0, -0.5, 0]}>
-            <boxGeometry args={[2.2, 0.3, 4.2]} />
-            <meshStandardMaterial 
-              color={config.secondaryColor}
-              roughness={0.9}
-            />
+          <mesh position={[0, 0.2, 0.5]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
           </mesh>
         </>
       )}
@@ -55,25 +89,21 @@ function ShoeModel({ config }) {
   );
 }
 
-export default function ShoeCustomizer({ config }) {
+// 3D Shoe Customizer Component
+function ShoeCustomizer({ config }) {
   return (
-    <div className="canvas-container">
+    <div className="w-full h-96 rounded-xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-50 to-gray-100">
       <Canvas
         camera={{ position: [5, 2, 5], fov: 50 }}
         shadows
         gl={{ antialias: true }}
       >
-        <ambientLight intensity={0.5} />
+        <ambientLight intensity={0.4} />
         <directionalLight 
           position={[10, 10, 5]} 
           intensity={1}
           castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-far={50}
-          shadow-camera-left={-10}
-          shadow-camera-right={10}
-          shadow-camera-top={10}
-          shadow-camera-bottom={-10}
+          shadow-mapSize={[1024, 1024]}
         />
         <pointLight position={[-10, -10, -10]} intensity={0.2} />
         
@@ -101,10 +131,8 @@ export default function ShoeCustomizer({ config }) {
   );
 }
 
-// src/components/ControlPanel.js
-import React from 'react';
-
-export default function ControlPanel({ config, onChange }) {
+// Control Panel Component
+function ControlPanel({ config, onChange }) {
   const handleChange = (e) => {
     const { name, value, type } = e.target;
     onChange({
@@ -113,140 +141,118 @@ export default function ControlPanel({ config, onChange }) {
   };
 
   return (
-    <div className="control-panel">
-      <h3>Customize Your Shoe</h3>
+    <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+      <h3 className="text-2xl font-bold text-gray-800 mb-6">Customize Your Shoe</h3>
       
-      <div className="control-group">
-        <label>Shoe Type:</label>
-        <select 
-          name="type"
-          value={config.type} 
-          onChange={handleChange}
-        >
-          <option value="sneaker">Sneaker</option>
-          <option value="boot">Boot</option>
-          <option value="dress">Dress Shoe</option>
-          <option value="casual">Casual</option>
-        </select>
-      </div>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Shoe Type:</label>
+          <select 
+            name="type"
+            value={config.type} 
+            onChange={handleChange}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          >
+            <option value="sneaker">Sneaker</option>
+            <option value="boot">Boot</option>
+            <option value="dress">Dress Shoe</option>
+            <option value="casual">Casual</option>
+          </select>
+        </div>
 
-      <div className="control-group">
-        <label>Primary Color:</label>
-        <input
-          type="color"
-          name="primaryColor"
-          value={config.primaryColor}
-          onChange={handleChange}
-        />
-      </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color:</label>
+          <div className="flex items-center space-x-3">
+            <input
+              type="color"
+              name="primaryColor"
+              value={config.primaryColor}
+              onChange={handleChange}
+              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
+            />
+            <span className="text-sm text-gray-600">{config.primaryColor}</span>
+          </div>
+        </div>
 
-      <div className="control-group">
-        <label>Secondary Color:</label>
-        <input
-          type="color"
-          name="secondaryColor"
-          value={config.secondaryColor}
-          onChange={handleChange}
-        />
-      </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color:</label>
+          <div className="flex items-center space-x-3">
+            <input
+              type="color"
+              name="secondaryColor"
+              value={config.secondaryColor}
+              onChange={handleChange}
+              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
+            />
+            <span className="text-sm text-gray-600">{config.secondaryColor}</span>
+          </div>
+        </div>
 
-      <div className="control-group">
-        <label>Material:</label>
-        <div className="radio-group">
-          {['leather', 'canvas', 'synthetic'].map(material => (
-            <label key={material}>
-              <input
-                type="radio"
-                name="material"
-                value={material}
-                checked={config.material === material}
-                onChange={handleChange}
-              />
-              {material.charAt(0).toUpperCase() + material.slice(1)}
-            </label>
-          ))}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">Material:</label>
+          <div className="grid grid-cols-3 gap-3">
+            {['leather', 'canvas', 'synthetic'].map(material => (
+              <label key={material} className="flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="material"
+                  value={material}
+                  checked={config.material === material}
+                  onChange={handleChange}
+                  className="sr-only"
+                />
+                <span className={`text-sm font-medium ${config.material === material ? 'text-indigo-600' : 'text-gray-600'}`}>
+                  {material.charAt(0).toUpperCase() + material.slice(1)}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Size:</label>
+          <div className="space-y-2">
+            <input
+              type="range"
+              name="size"
+              min="6"
+              max="13"
+              value={config.size}
+              onChange={handleChange}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            />
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>6</span>
+              <span className="font-medium text-indigo-600">Size {config.size}</span>
+              <span>13</span>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div className="control-group">
-        <label>Size:</label>
-        <input
-          type="range"
-          name="size"
-          min="6"
-          max="13"
-          value={config.size}
-          onChange={handleChange}
-        />
-        <span className="size-display">Size {config.size}</span>
-      </div>
     </div>
   );
 }
 
-// src/components/LoadingSpinner.js
-import React from 'react';
-
-export default function LoadingSpinner() {
-  return (
-    <div className="loading-spinner">
-      <div className="spinner">
-        <div className="bounce1"></div>
-        <div className="bounce2"></div>
-        <div className="bounce3"></div>
-      </div>
-      <p>Loading 3D Shoe Customizer...</p>
-    </div>
-  );
-}
-
-// src/App.js
-import React, { useState, useEffect, Suspense } from 'react';
-import ShoeCustomizer from './components/ShoeCustomizer';
-import ControlPanel from './components/ControlPanel';
-import LoadingSpinner from './components/LoadingSpinner';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-import './App.css';
-
+// Main App Component
 export default function App() {
-  const [shoeConfig, setShoeConfig] = useState(() => {
-    const savedConfig = localStorage.getItem('shoeConfig');
-    return savedConfig ? JSON.parse(savedConfig) : {
-      type: 'sneaker',
-      primaryColor: '#4f46e5',
-      secondaryColor: '#ffffff',
-      material: 'leather',
-      size: 9
-    };
+  const [shoeConfig, setShoeConfig] = useState({
+    type: 'sneaker',
+    primaryColor: '#4f46e5',
+    secondaryColor: '#ffffff',
+    material: 'leather',
+    size: 9
   });
 
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Register service worker
-    serviceWorkerRegistration.register();
+    // Simulate loading time for better UX
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
 
-    // Load assets
-    const loadAssets = async () => {
-      try {
-        await Promise.all([
-          import('@react-three/drei').then(module => {
-            if (!module.useGLTF.preload) return;
-            module.useGLTF.preload('/assets/models/shoe.glb');
-          }),
-          new Promise(resolve => setTimeout(resolve, 1500)) // Minimum loading time
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadAssets();
+    return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem('shoeConfig', JSON.stringify(shoeConfig));
-  }, [shoeConfig]);
 
   const handleConfigChange = (newConfig) => {
     setShoeConfig(prev => ({ ...prev, ...newConfig }));
@@ -257,318 +263,94 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>3D Shoe Customizer</h1>
-        <p>Design your perfect custom shoes</p>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+              3D Shoe Customizer
+            </h1>
+            <p className="text-lg text-gray-600">
+              Design your perfect custom shoes in real-time
+            </p>
+          </div>
+        </div>
       </header>
-      <main className="app-main">
-        <ControlPanel 
-          config={shoeConfig}
-          onChange={handleConfigChange}
-        />
-        <div className="viewer-container">
-          <Suspense fallback={<LoadingSpinner />}>
-            <ShoeCustomizer config={shoeConfig} />
-          </Suspense>
-          <div className="viewer-info">
-            <p>Rotate: Left click + drag</p>
-            <p>Zoom: Mouse wheel or pinch</p>
-            <p>Pan: Right click + drag</p>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Control Panel */}
+          <div className="lg:col-span-1">
+            <ControlPanel 
+              config={shoeConfig}
+              onChange={handleConfigChange}
+            />
+          </div>
+          
+          {/* 3D Viewer */}
+          <div className="lg:col-span-2">
+            <div className="space-y-4">
+              <Suspense fallback={
+                <div className="w-full h-96 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="text-gray-500">Loading 3D Model...</div>
+                </div>
+              }>
+                <ShoeCustomizer config={shoeConfig} />
+              </Suspense>
+              
+              {/* Controls Info */}
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                    <span>Rotate: Left click + drag</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span>Zoom: Mouse wheel</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                    <span>Pan: Right click + drag</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
-      <footer className="app-footer">
-        <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer. Built with React & Three.js</p>
+
+      {/* Footer */}
+      <footer className="bg-white border-t mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center text-gray-600">
+            <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer. Built with React & Three.js</p>
+          </div>
+        </div>
       </footer>
+
+      {/* Custom Styles */}
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #4f46e5;
+          cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #4f46e5;
+          cursor: pointer;
+          border: none;
+        }
+      `}</style>
     </div>
   );
 }
-
-// src/serviceWorkerRegistration.js
-export function register() {
-  if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then(registration => {
-          console.log('SW registered:', registration);
-          registration.update();
-        })
-        .catch(error => {
-          console.log('SW registration failed:', error);
-        });
-    });
-  }
-}
-
-export function unregister() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
-      registration.unregister();
-    });
-  }
-}
-
-// src/index.js
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-import reportWebVitals from './reportWebVitals';
-import './index.css';
-
-const container = document.getElementById('root');
-const root = createRoot(container);
-
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-serviceWorkerRegistration.register();
-
-// To measure performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-reportWebVitals();
-
-// webpack.config.js (optimized version)
-const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const { CleanWebpackPlugin } = require('clean-webpack-plugin');
-const WorkboxWebpackPlugin = require('workbox-webpack-plugin');
-const WebpackPwaManifest = require('webpack-pwa-manifest');
-const webpack = require('webpack');
-
-module.exports = {
-  entry: './src/index.js',
-  mode: 'production',
-  output: {
-    path: path.resolve(__dirname, 'dist'),
-    filename: 'static/js/[name].[contenthash].js',
-    publicPath: '/',
-    assetModuleFilename: 'assets/[hash][ext][query]'
-  },
-  resolve: {
-    extensions: ['.js', '.jsx'],
-    fallback: {
-      "path": require.resolve("path-browserify"),
-      "stream": require.resolve("stream-browserify"),
-      "crypto": require.resolve("crypto-browserify")
-    }
-  },
-  module: {
-    rules: [
-      {
-        test: /\.(js|jsx)$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: [
-              ['@babel/preset-env', { 
-                useBuiltIns: 'usage',
-                corejs: 3 
-              }],
-              '@babel/preset-react'
-            ],
-            plugins: ['@babel/plugin-transform-runtime']
-          }
-        }
-      },
-      {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader', 'postcss-loader']
-      },
-      {
-        test: /\.(png|jpe?g|gif|svg|webp|glb|gltf)$/i,
-        type: 'asset/resource'
-      }
-    ]
-  },
-  plugins: [
-    new CleanWebpackPlugin(),
-    new HtmlWebpackPlugin({
-      template: './public/index.html',
-      favicon: './public/favicon.ico',
-      minify: {
-        removeComments: true,
-        collapseWhitespace: true,
-        removeRedundantAttributes: true,
-        useShortDoctype: true,
-        removeEmptyAttributes: true,
-        removeStyleLinkTypeAttributes: true,
-        keepClosingSlash: true,
-        minifyJS: true,
-        minifyCSS: true,
-        minifyURLs: true
-      }
-    }),
-    new WebpackPwaManifest({
-      name: '3D Shoe Customizer',
-      short_name: 'ShoeCustomizer',
-      description: 'Customize 3D shoes in your browser',
-      background_color: '#ffffff',
-      theme_color: '#4f46e5',
-      crossorigin: 'use-credentials',
-      inject: true,
-      fingerprints: false,
-      ios: true,
-      icons: [
-        {
-          src: path.resolve('public/assets/icons/icon-512x512.png'),
-          sizes: [96, 128, 192, 256, 384, 512],
-          destination: path.join('assets', 'icons')
-        }
-      ]
-    }),
-    new WorkboxWebpackPlugin.GenerateSW({
-      clientsClaim: true,
-      skipWaiting: true,
-      maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-      runtimeCaching: [
-        {
-          urlPattern: /\.(?:png|jpg|jpeg|svg|gif|glb|gltf)$/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'images',
-            expiration: {
-              maxEntries: 50,
-              maxAgeSeconds: 30 * 24 * 60 * 60
-            }
-          }
-        },
-        {
-          urlPattern: /\.(?:js|css)$/,
-          handler: 'StaleWhileRevalidate',
-          options: {
-            cacheName: 'static-resources'
-          }
-        }
-      ]
-    }),
-    new webpack.ProvidePlugin({
-      process: 'process/browser',
-      Buffer: ['buffer', 'Buffer']
-    })
-  ],
-  optimization: {
-    splitChunks: {
-      chunks: 'all',
-      cacheGroups: {
-        vendor: {
-          test: /[\\/]node_modules[\\/]/,
-          name: 'vendors',
-          chunks: 'all'
-        },
-        three: {
-          test: /[\\/]node_modules[\\/](three|@react-three)[\\/]/,
-          name: 'three',
-          chunks: 'all',
-          priority: 10
-        }
-      }
-    },
-    runtimeChunk: 'single'
-  },
-  performance: {
-    hints: false,
-    maxEntrypointSize: 512000,
-    maxAssetSize: 512000
-  }
-};
-
-{
-  "name": "3d-shoe-customizer",
-  "version": "1.0.0",
-  "description": "A 3D shoe customization app built with React and Three.js",
-  "private": true,
-  "homepage": ".",
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "three": "^0.158.0",
-    "@react-three/fiber": "^8.15.12",
-    "@react-three/drei": "^9.88.13"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.23.6",
-    "@babel/preset-env": "^7.23.6",
-    "@babel/preset-react": "^7.23.3",
-    "@babel/plugin-transform-runtime": "^7.23.6",
-    "@babel/runtime": "^7.23.6",
-    "babel-loader": "^9.1.3",
-    "webpack": "^5.89.0",
-    "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1",
-    "html-webpack-plugin": "^5.6.0",
-    "clean-webpack-plugin": "^4.0.0",
-    "css-loader": "^6.8.1",
-    "style-loader": "^3.3.3",
-    "postcss": "^8.4.32",
-    "postcss-loader": "^7.3.3",
-    "autoprefixer": "^10.4.16",
-    "workbox-webpack-plugin": "^7.0.0",
-    "webpack-pwa-manifest": "^4.3.0",
-    "path-browserify": "^1.0.1",
-    "stream-browserify": "^3.0.0",
-    "crypto-browserify": "^3.12.0",
-    "process": "^0.11.10",
-    "buffer": "^6.0.3",
-    "core-js": "^3.34.0"
-  },
-  "scripts": {
-    "start": "webpack serve --mode development --open",
-    "build": "webpack --mode production",
-    "build:dev": "webpack --mode development",
-    "serve": "webpack serve --mode development",
-    "clean": "rm -rf dist",
-    "analyze": "webpack-bundle-analyzer dist/static/js/*.js",
-    "lint": "eslint src --ext .js,.jsx",
-    "lint:fix": "eslint src --ext .js,.jsx --fix",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
-  "keywords": [
-    "3d",
-    "shoe",
-    "customizer",
-    "react",
-    "three.js",
-    "webgl",
-    "pwa"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
-  "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/3d-shoe-customizer.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/3d-shoe-customizer/issues"
-  }
-}
-
-[build]
-  command = "npm run build"
-  publish = "dist"
-
-[build.environment]
-  NODE_VERSION = "18"
