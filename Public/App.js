@@ -62,12 +62,6 @@ generateBtn.addEventListener("click", async () => {
   } finally {
     generateBtn.disabled = false;
   }
-  pre.flash {
-  animation: flashGreen 0.4s ease-in-out;
-}
-
-@keyframes flashGreen {
-  0% { background-color: #0f0; color: black; }
-  100% { background-color: black; color: #0f0; }
-}
+  log.classList.add("flash");
+setTimeout(() => log.classList.remove("flash"), 400);
 });
