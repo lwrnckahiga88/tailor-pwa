@@ -12,7 +12,14 @@ const promptInput = document.getElementById("prompt");
 const generateBtn = document.getElementById("generateBtn");
 const log = document.getElementById("log");
 
-// === Utility: Animate dots while loading ===
+// === Flash Log Utility ===
+function flashLog(success = true) {
+  log.classList.remove("flash-success", "flash-error");
+  log.classList.add(success ? "flash-success" : "flash-error");
+  setTimeout(() => log.classList.remove("flash-success", "flash-error"), 400);
+}
+
+// === Loading Animation ===
 let loadingInterval;
 function startLoadingAnimation() {
   let dots = 0;
@@ -26,11 +33,12 @@ function stopLoadingAnimation() {
   clearInterval(loadingInterval);
 }
 
-// === Handle Generate Button Click ===
+// === Main Generate Logic ===
 generateBtn.addEventListener("click", async () => {
   const prompt = promptInput.value.trim();
   if (!prompt) {
     log.textContent = "⚠️ Please enter a prompt.";
+    flashLog(false);
     return;
   }
 
@@ -54,14 +62,13 @@ generateBtn.addEventListener("click", async () => {
     log.textContent = `✅ Generated PWA files:\n\n${Object.keys(result)
       .map((key) => `📄 ${key.toUpperCase()}:\n${result[key].slice(0, 200)}...\n`)
       .join("\n")}`;
-
+    
+    flashLog(true);
   } catch (error) {
     stopLoadingAnimation();
-    console.error("❌ Error:", error);
     log.textContent = `❌ ${error.message}`;
+    flashLog(false);
   } finally {
     generateBtn.disabled = false;
   }
-  log.classList.add("flash");
-setTimeout(() => log.classList.remove("flash"), 400);
 });
