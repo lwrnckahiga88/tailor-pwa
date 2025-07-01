@@ -5,7 +5,7 @@
   "main": "netlify/functions/pwa-agent.js",
   "scripts": {
     "dev": "netlify dev",
-    "build": "echo 'No build step needed for vanilla PWA'",
+    "build": "mkdir -p dist && cp -r public/* dist/",
     "start": "netlify dev"
   },
   "dependencies": {
