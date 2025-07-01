@@ -1,41 +1,73 @@
-const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { OpenAI } = require("openai");
-const { create } = require("ipfs-http-client");
+const express = require("express");
 const archiver = require("archiver");
 const axios = require("axios");
-const cors = require("cors");
-const FormData = require("form-data");
+const readline = require("readline");
+const { OpenAI } = require("openai");
+const { create } = require("ipfs-http-client");
+const { execSync } = require("child_process");
 require("dotenv").config();
 
-const app = express();
-const PORT = 5000;
+// Auto-install required packages
+const requiredPackages = [
+  "openai", "express", "archiver", "dotenv", "ipfs-http-client", "axios"
+];
+
+requiredPackages.forEach(pkg => {
+  try {
+    require.resolve(pkg);
+  } catch (e) {
+    console.log(`📦 Installing ${pkg}...`);
+    execSync(`npm install ${pkg}`, { stdio: "inherit" });
+  }
+});
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const publicDir = path.join(__dirname, "public");
 
-app.use(cors());
-app.use(express.json());
+// Setup public folder and .env.example
+if (!fs.existsSync(publicDir)) {
+  fs.mkdirSync(publicDir);
+  console.log("📁 Created public/ folder.");
+}
 
-// === Core agent logic ===
-async function clarifyPrompt(prompt) {
+if (!fs.existsSync(".env.example")) {
+  fs.writeFileSync(".env.example", `# Rename this file to .env and fill in the keys
+OPENAI_API_KEY=your_openai_api_key
+NETLIFY_AUTH_TOKEN=your_netlify_token
+NETLIFY_SITE_ID=your_netlify_site_id
+`);
+  console.log("🔐 Created .env.example");
+}
+
+// === 1. Clarify Prompt ===
+async function clarifyPrompt(userPrompt) {
   const chat = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
-      { role: "system", content: "You clarify vague PWA ideas into concrete app specs." },
-      { role: "user", content: `Clarify this: ${prompt}` }
+      { role: "system", content: "You help clarify vague app ideas into specific PWA requirements." },
+      { role: "user", content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"` }
     ]
   });
   return chat.choices[0].message.content.trim();
 }
 
+// === 2. Generate PWA Files ===
 async function generatePWA(prompt) {
   const chat = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
-        content: `Return JSON: {"html":"...", "js":"...", "manifest":"...", "sw":"...", "css":"..."}`
+        content: `You're a PWA generator. Return JSON:
+{
+  "html": "...",
+  "js": "...",
+  "manifest": "...",
+  "sw": "...",
+  "css": "..."
+}`
       },
       { role: "user", content: prompt }
     ]
@@ -43,48 +75,76 @@ async function generatePWA(prompt) {
   return JSON.parse(chat.choices[0].message.content.trim());
 }
 
-function writeFiles({ html, js, manifest, sw, css }) {
+// === 3. Write Files ===
+function writeFiles(files) {
   if (fs.existsSync(publicDir)) fs.rmSync(publicDir, { recursive: true });
   fs.mkdirSync(publicDir);
-  fs.writeFileSync(path.join(publicDir, "index.html"), html);
-  fs.writeFileSync(path.join(publicDir, "app.js"), js);
-  fs.writeFileSync(path.join(publicDir, "manifest.json"), manifest);
-  fs.writeFileSync(path.join(publicDir, "service-worker.js"), sw);
-  fs.writeFileSync(path.join(publicDir, "style.css"), css);
+
+  fs.writeFileSync(path.join(publicDir, "index.html"), files.html);
+  fs.writeFileSync(path.join(publicDir, "app.js"), files.js);
+  fs.writeFileSync(path.join(publicDir, "manifest.json"), files.manifest);
+  fs.writeFileSync(path.join(publicDir, "service-worker.js"), files.sw);
+  fs.writeFileSync(path.join(publicDir, "style.css"), files.css || "");
+  console.log("📁 Files written to public/");
 }
 
-async function zipFiles() {
+// === 4. Serve Locally ===
+function servePWA() {
+  const app = express();
+  app.use(express.static("public"));
+  app.listen(3000, () =>
+    console.log("🌐 Local PWA running at: http://localhost:3000")
+  );
+}
+
+// === 5. Zip Project ===
+function zipFiles() {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream("output.zip");
     const archive = archiver("zip", { zlib: { level: 9 } });
+
     archive.pipe(output);
     archive.directory("public/", false);
     archive.finalize();
-    output.on("close", () => resolve());
+
+    output.on("close", () => {
+      console.log("📦 Project zipped as output.zip");
+      resolve();
+    });
+
     archive.on("error", reject);
   });
 }
 
+// === 6. Deploy to Netlify ===
 async function deployToNetlify() {
-  const form = new FormData();
-  fs.readdirSync(publicDir).forEach((file) => {
-    form.append(file, fs.createReadStream(path.join(publicDir, file)));
-  });
+  const formData = new FormData();
+  const files = fs.readdirSync(publicDir);
+  for (const file of files) {
+    formData.append(file, fs.createReadStream(path.join(publicDir, file)));
+  }
 
-  const res = await axios.post(
-    `https://api.netlify.com/api/v1/sites/${process.env.NETLIFY_SITE_ID}/deploys`,
-    form,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
-        ...form.getHeaders()
-      }
-    }
-  );
+  const headers = {
+    Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+    ...formData.getHeaders?.()
+  };
 
-  return res.data.deploy_ssl_url;
+  try {
+    const res = await axios.post(
+      `https://api.netlify.com/api/v1/sites/${process.env.NETLIFY_SITE_ID}/deploys`,
+      formData,
+      { headers }
+    );
+
+    console.log("🚀 Netlify deployed:", res.data.deploy_ssl_url);
+    return res.data.deploy_ssl_url;
+  } catch (err) {
+    console.error("❌ Netlify deployment failed:", err.message);
+    return null;
+  }
 }
 
+// === 7. Upload to IPFS ===
 async function uploadToIPFS() {
   const ipfs = create({ url: "https://ipfs.infura.io:5001" });
   const files = fs.readdirSync(publicDir).map((file) => ({
@@ -93,26 +153,37 @@ async function uploadToIPFS() {
   }));
 
   const { cid } = await ipfs.addAll(files, { wrapWithDirectory: true }).next();
-  return `https://ipfs.io/ipfs/${cid.value.toString()}`;
+  const ipfsUrl = `https://ipfs.io/ipfs/${cid.value.toString()}`;
+  console.log("📡 IPFS uploaded:", ipfsUrl);
+  return ipfsUrl;
 }
 
-// === API Route ===
-app.post("/api/pwa-agent", async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    const clarified = await clarifyPrompt(prompt);
-    const files = await generatePWA(clarified);
-    writeFiles(files);
-    await zipFiles();
-    const netlifyUrl = await deployToNetlify();
-    const ipfsUrl = await uploadToIPFS();
-    res.json({ netlifyUrl, ipfsUrl });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// === Main Agent ===
+async function runAgent() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-app.listen(PORT, () => {
-  console.log(`🔌 Server running on http://localhost:${PORT}`);
-});
+  rl.question("🤖 Describe your PWA app: ", async (userPrompt) => {
+    rl.close();
+
+    console.log("\n🧠 Clarifying prompt...");
+    const refinedPrompt = await clarifyPrompt(userPrompt);
+    console.log("✏️ Refined:", refinedPrompt);
+
+    console.log("\n🛠 Generating PWA files...");
+    const files = await generatePWA(refinedPrompt);
+
+    writeFiles(files);
+    servePWA();
+    await zipFiles();
+
+    console.log("\n🌍 Deploying to Netlify...");
+    await deployToNetlify();
+
+    console.log("\n📡 Uploading to IPFS...");
+    await uploadToIPFS();
+
+    console.log("\n✅ All done! Your AI-generated PWA is ready.");
+  });
+}
+
+runAgent();
