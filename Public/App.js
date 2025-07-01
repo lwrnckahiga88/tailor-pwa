@@ -28,7 +28,7 @@ generateBtn.addEventListener("click", async () => {
   generateBtn.disabled = true;
 
   try {
-    const response = await fetch("/.netlify/functions/pwa-agent", {
+    const response = await fetch("/netlify/functions/pwa-agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
