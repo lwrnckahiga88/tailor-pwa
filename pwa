@@ -1,477 +1,671 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My PWA App</title>
+{
+  "name": "tailor-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "homepage": ".",
+  "dependencies": {
+    "@react-three/drei": "^9.77.5",
+    "@react-three/fiber": "^8.14.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "^5.0.1",
+    "three": "^0.155.0",
+    "web-vitals": "^3.3.2"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build && cp build/* dist/ 2>/dev/null || mkdir -p dist && cp -r build/* dist/",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+[build]
+  publish = "build"
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_VERSION = "9"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+}
+
+const CACHE_NAME = 'shoe-customizer-pwa-v1.0.0';
+const STATIC_CACHE_NAME = 'static-v1';
+
+// Assets to cache on install
+const STATIC_ASSETS = [
+  '/',
+  '/static/js/bundle.js',
+  '/static/css/main.css',
+  '/manifest.json'
+];
+
+// Install event - cache static assets
+self.addEventListener('install', (event) => {
+  console.log('[SW] Installing...');
+  event.waitUntil(
+    caches.open(STATIC_CACHE_NAME)
+      .then((cache) => {
+        console.log('[SW] Caching static assets');
+        return cache.addAll(STATIC_ASSETS);
+      })
+      .catch((error) => {
+        console.log('[SW] Failed to cache assets:', error);
+      })
+  );
+  self.skipWaiting();
+});
+
+// Activate event - clean up old caches
+self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating...');
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME && cacheName !== STATIC_CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// Fetch event - serve cached content when offline
+self.addEventListener('fetch', (event) => {
+  // Skip cross-origin requests
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // Handle navigation requests
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => {
+          return caches.match('/');
+        })
+    );
+    return;
+  }
+
+  // Handle other requests with cache-first strategy
+  event.respondWith(
+    caches.match(event.request)
+      .then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        
+        return fetch(event.request)
+          .then((response) => {
+            // Don't cache if not a valid response
+            if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+
+            // Clone the response
+            const responseToCache = response.clone();
+
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+
+            return response;
+          })
+          .catch((error) => {
+            console.log('[SW] Fetch failed:', error);
+            // Return a fallback response if available
+            if (event.request.destination === 'document') {
+              return caches.match('/');
+            }
+          });
+      })
+  );
+});
+
+// Background sync for offline actions
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'background-sync') {
+    console.log('[SW] Background sync triggered');
+    event.waitUntil(
+      // Handle background sync logic here
+      Promise.resolve()
+    );
+  }
+});
+
+// Push notification handling
+self.addEventListener('push', (event) => {
+  if (event.data) {
+    const data = event.data.json();
+    const options = {
+      body: data.body,
+      icon: '/logo192.png',
+      badge: '/logo192.png',
+      vibrate: [100, 50, 100],
+      data: {
+        dateOfArrival: Date.now(),
+        primaryKey: 1
+      }
+    };
     
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#6366f1">
-    <meta name="description" content="A complete Progressive Web App">
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTXkgUFdBIEFwcCIsInNob3J0X25hbWUiOiJQV0EiLCJzdGFydF91cmwiOiIvIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiI2ZmZmZmZiIsInRoZW1lX2NvbG9yIjoiIzYzNjZmMSIsImljb25zIjpbeyJzcmMiOiJkYXRhOmltYWdlL3N2Zyt4bWw7YmFzZTY0LFBITjJaeUIzYVdSMGFEMGlNVEk0SWlCb1pXbG5hSFE5SWpFeU9DSWdkbWxsZDBKdmVEMGlNQ0F3SURFME5DQXhORFFpSUdacGJHdzlJaU0yTXpZMlpqRWlQZ29nSUNBOGNtVmpkQ0IzYVdSMGFEMGlNVEkwSWlCb1pXbG5hSFE5SWpFeU5DSWdjbmc5SWpJaUlHWnBiR3c5SWlObVptWm1abVlpTHo0S0lDQWdQR05wY21Oc1pTQmplRDBpTmpRaUlHTjVQU0kyTkNJZ2NqMGlNekFpSUdacGJHdzlJaU0yTXpZMlpqRWlMejRLUEM5emRtYysiLCJzaXplcyI6IjE0NHgxNDQiLCJ0eXBlIjoiaW1hZ2Uvc3ZnK3htbCJ9XX0=">
-    
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDE0NCAxNDQiIGZpbGw9IiM2MzY2ZjEiPgogICA8cmVjdCB3aWR0aD0iMTI0IiBoZWlnaHQ9IjEyNCIgcng9IjIiIGZpbGw9IiNmZmZmZmYiLz4KICA8Y2lyY2xlIGN4PSI2NCIgY3k9IjY0IiByPSIzMCIgZmlsbD0iIzYzNjZmMSIvPgo8L3N2Zz4=">
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    event.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  }
+});
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            color: white;
-        }
+// Notification click handling
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification click received.');
+  
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.openWindow('/')
+  );
+});
 
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 1rem;
-            text-align: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
+import React, { useState, useEffect, Suspense, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import * as THREE from 'three';
 
-        .header h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
+// ======================== Components ========================
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
+      <div className="text-center">
+        <div className="inline-flex space-x-2 mb-4">
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce"></div>
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+        </div>
+        <p className="text-gray-600 text-lg">Loading 3D Shoe Customizer...</p>
+      </div>
+    </div>
+  );
+}
 
-        .status {
-            font-size: 0.9rem;
-            opacity: 0.8;
-        }
+function ShoeModel({ config }) {
+  const meshRef = useRef();
+  const upperRef = useRef();
+  const soleRef = useRef();
+  
+  useFrame((state, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.2;
+    }
+  });
 
-        .main {
-            flex: 1;
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            max-width: 800px;
-            margin: 0 auto;
-        }
+  const getShoeGeometry = (type) => {
+    switch (type) {
+      case 'boot': return { upper: [2, 1.2, 4], sole: [2.2, 0.4, 4.2] };
+      case 'dress': return { upper: [1.8, 0.7, 4.2], sole: [2, 0.2, 4.4] };
+      case 'casual': return { upper: [2.1, 0.9, 3.8], sole: [2.3, 0.3, 4] };
+      default: return { upper: [2, 0.8, 4], sole: [2.2, 0.3, 4.2] };
+    }
+  };
 
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-            width: 100%;
-        }
+  const geometry = getShoeGeometry(config.type);
 
-        .feature-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
+  return (
+    <group ref={meshRef} dispose={null}>
+      <mesh ref={upperRef} position={[0, 0, 0]}>
+        <boxGeometry args={geometry.upper} />
+        <meshStandardMaterial 
+          color={config.primaryColor}
+          roughness={config.material === 'leather' ? 0.8 : config.material === 'canvas' ? 0.9 : 0.2}
+          metalness={config.material === 'synthetic' ? 0.3 : 0.1}
+        />
+      </mesh>
+      
+      <mesh ref={soleRef} position={[0, -0.5, 0]}>
+        <boxGeometry args={geometry.sole} />
+        <meshStandardMaterial color={config.secondaryColor} roughness={0.9} />
+      </mesh>
+      
+      {(config.type === 'sneaker' || config.type === 'casual') && (
+        <>
+          <mesh position={[0, 0.2, 1.5]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
+          </mesh>
+          <mesh position={[0, 0.2, 1]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
+          </mesh>
+          <mesh position={[0, 0.2, 0.5]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
+            <meshStandardMaterial color="#2d2d2d" />
+          </mesh>
+        </>
+      )}
+    </group>
+  );
+}
 
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
+function ShoeCustomizer({ config }) {
+  return (
+    <div className="w-full h-96 rounded-xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-50 to-gray-100">
+      <Canvas
+        camera={{ position: [5, 2, 5], fov: 50 }}
+        shadows
+        gl={{ antialias: true }}
+      >
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+        <pointLight position={[-10, -10, -10]} intensity={0.2} />
+        <ShoeModel config={config} />
+        <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={10} blur={2.5} />
+        <Environment preset="studio" />
+        <OrbitControls enablePan enableZoom enableRotate minDistance={3} maxDistance={15} />
+      </Canvas>
+    </div>
+  );
+}
 
-        .feature-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
+function ControlPanel({ config, onChange }) {
+  const handleChange = (e) => {
+    const { name, value, type } = e.target;
+    onChange({
+      [name]: type === 'number' ? parseInt(value) : value
+    });
+  };
 
-        .feature-title {
-            font-size: 1.2rem;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-
-        .feature-description {
-            opacity: 0.8;
-            line-height: 1.5;
-        }
-
-        .install-banner {
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin: 2rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            display: none;
-        }
-
-        .install-banner.show {
-            display: block;
-            animation: slideIn 0.5s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .install-btn {
-            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 1rem;
-            box-shadow: 0 4px 15px rgba(238, 90, 36, 0.4);
-        }
-
-        .install-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(238, 90, 36, 0.6);
-        }
-
-        .counter {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .counter-display {
-            font-size: 3rem;
-            font-weight: bold;
-            margin-bottom: 1rem;
-            color: #ffd700;
-        }
-
-        .counter-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-        }
-
-        .counter-btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            min-width: 50px;
-        }
-
-        .counter-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.1);
-        }
-
-        .footer {
-            background: rgba(0, 0, 0, 0.2);
-            padding: 1rem;
-            text-align: center;
-            font-size: 0.9rem;
-            opacity: 0.8;
-        }
-
-        .connection-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .online {
-            background: #10b981;
-            color: white;
-        }
-
-        .offline {
-            background: #ef4444;
-            color: white;
-        }
-
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .feature-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .main {
-                padding: 1rem;
-            }
-            
-            .counter-display {
-                font-size: 2rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="connection-status" id="connectionStatus">Online</div>
-    
-    <header class="header">
-        <h1>My PWA App</h1>
-        <div class="status" id="pwaStatus">Progressive Web App Ready</div>
-    </header>
-
-    <main class="main">
-        <div class="install-banner" id="installBanner">
-            <h3>📱 Install This App</h3>
-            <p>Add this PWA to your home screen for the best experience!</p>
-            <button class="install-btn" id="installBtn">Install App</button>
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+      <h3 className="text-2xl font-bold text-gray-800 mb-6">Customize Your Shoe</h3>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Shoe Type:</label>
+          <select 
+            name="type"
+            value={config.type} 
+            onChange={handleChange}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="sneaker">Sneaker</option>
+            <option value="boot">Boot</option>
+            <option value="dress">Dress Shoe</option>
+            <option value="casual">Casual</option>
+          </select>
         </div>
 
-        <div class="feature-grid">
-            <div class="feature-card">
-                <div class="feature-icon">🚀</div>
-                <h3 class="feature-title">Fast Loading</h3>
-                <p class="feature-description">Instant loading with service worker caching for optimal performance.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">📱</div>
-                <h3 class="feature-title">Mobile First</h3>
-                <p class="feature-description">Responsive design that works perfectly on all devices and screen sizes.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">🔄</div>
-                <h3 class="feature-title">Offline Ready</h3>
-                <p class="feature-description">Works offline with cached content and automatic sync when online.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">🎨</div>
-                <h3 class="feature-title">Modern Design</h3>
-                <p class="feature-description">Beautiful glassmorphism design with smooth animations and transitions.</p>
-            </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color:</label>
+          <div className="flex items-center space-x-3">
+            <input
+              type="color"
+              name="primaryColor"
+              value={config.primaryColor}
+              onChange={handleChange}
+              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
+            />
+            <span className="text-sm text-gray-600">{config.primaryColor}</span>
+          </div>
         </div>
 
-        <div class="counter">
-            <h3>Interactive Counter</h3>
-            <div class="counter-display" id="counterDisplay">0</div>
-            <div class="counter-buttons">
-                <button class="counter-btn" id="decrementBtn">-</button>
-                <button class="counter-btn" id="resetBtn">↻</button>
-                <button class="counter-btn" id="incrementBtn">+</button>
-            </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color:</label>
+          <div className="flex items-center space-x-3">
+            <input
+              type="color"
+              name="secondaryColor"
+              value={config.secondaryColor}
+              onChange={handleChange}
+              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
+            />
+            <span className="text-sm text-gray-600">{config.secondaryColor}</span>
+          </div>
         </div>
-    </main>
 
-    <footer class="footer">
-        <p>&copy; 2025 My PWA App - Built with modern web technologies</p>
-    </footer>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">Material:</label>
+          <div className="grid grid-cols-3 gap-3">
+            {['leather', 'canvas', 'synthetic'].map(material => (
+              <label key={material} className="flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="material"
+                  value={material}
+                  checked={config.material === material}
+                  onChange={handleChange}
+                  className="sr-only"
+                />
+                <span className={`text-sm font-medium ${config.material === material ? 'text-indigo-600' : 'text-gray-600'}`}>
+                  {material.charAt(0).toUpperCase() + material.slice(1)}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
 
-    <script>
-        // PWA Installation
-        let deferredPrompt;
-        const installBanner = document.getElementById('installBanner');
-        const installBtn = document.getElementById('installBtn');
-        const pwaStatus = document.getElementById('pwaStatus');
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Size:</label>
+          <div className="space-y-2">
+            <input
+              type="range"
+              name="size"
+              min="6"
+              max="13"
+              value={config.size}
+              onChange={handleChange}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>6</span>
+              <span className="font-medium text-indigo-600">Size {config.size}</span>
+              <span>13</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        // Check if PWA is already installed
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            pwaStatus.textContent = 'Running as PWA';
+// ======================== Main App Component ========================
+export default function App() {
+  const [shoeConfig, setShoeConfig] = useState({
+    type: 'sneaker',
+    primaryColor: '#4f46e5',
+    secondaryColor: '#ffffff',
+    material: 'leather',
+    size: 9
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    // Handle installation prompt
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    // Handle network status
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Simulate loading
+    const timer = setTimeout(() => setIsLoading(false), 2000);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('User accepted install');
+        } else {
+          console.log('User dismissed install');
         }
+        setDeferredPrompt(null);
+        setIsInstallable(false);
+      });
+    }
+  };
 
-        // PWA Install Prompt
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            installBanner.classList.add('show');
-        });
+  const handleConfigChange = (newConfig) => {
+    setShoeConfig(prev => ({ ...prev, ...newConfig }));
+  };
 
-        installBtn.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    installBanner.classList.remove('show');
-                    pwaStatus.textContent = 'PWA Installed Successfully!';
-                }
-                deferredPrompt = null;
-            }
-        });
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
-        // Counter Functionality
-        let counter = parseInt(localStorage.getItem('pwaCounter') || '0');
-        const counterDisplay = document.getElementById('counterDisplay');
-        const incrementBtn = document.getElementById('incrementBtn');
-        const decrementBtn = document.getElementById('decrementBtn');
-        const resetBtn = document.getElementById('resetBtn');
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50">
+      {/* PWA Installation Banner */}
+      {isInstallable && (
+        <div className="bg-indigo-600 text-white p-3 text-center">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <span>Install this app for a better experience</span>
+            <button 
+              onClick={handleInstallClick}
+              className="ml-4 px-4 py-2 bg-white text-indigo-600 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+            >
+              Install
+            </button>
+          </div>
+        </div>
+      )}
 
-        function updateCounter() {
-            counterDisplay.textContent = counter;
-            // Note: Using in-memory storage instead of localStorage for Claude.ai compatibility
-            try {
-                localStorage.setItem('pwaCounter', counter.toString());
-            } catch (e) {
-                console.log('Storage not available, using memory only');
-            }
-        }
+      {/* Offline Notification */}
+      {isOffline && (
+        <div className="bg-yellow-500 text-white p-3 text-center">
+          You are currently offline. Some features may be limited.
+        </div>
+      )}
 
-        incrementBtn.addEventListener('click', () => {
-            counter++;
-            updateCounter();
-        });
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+              3D Shoe Customizer
+            </h1>
+            <p className="text-lg text-gray-600">
+              Design your perfect custom shoes in real-time
+            </p>
+          </div>
+        </div>
+      </header>
 
-        decrementBtn.addEventListener('click', () => {
-            counter--;
-            updateCounter();
-        });
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1">
+            <ControlPanel config={shoeConfig} onChange={handleConfigChange} />
+          </div>
+          
+          <div className="lg:col-span-2">
+            <div className="space-y-4">
+              <Suspense fallback={
+                <div className="w-full h-96 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="text-gray-500">Loading 3D Model...</div>
+                </div>
+              }>
+                <ShoeCustomizer config={shoeConfig} />
+              </Suspense>
+              
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                    <span>Rotate: Left click + drag</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span>Zoom: Mouse wheel</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                    <span>Pan: Right click + drag</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
 
-        resetBtn.addEventListener('click', () => {
-            counter = 0;
-            updateCounter();
-        });
+      {/* Footer */}
+      <footer className="bg-white border-t mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center text-gray-600">
+            <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer PWA</p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
 
-        updateCounter();
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-        // Online/Offline Status
-        const connectionStatus = document.getElementById('connectionStatus');
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
 
-        function updateConnectionStatus() {
-            if (navigator.onLine) {
-                connectionStatus.textContent = 'Online';
-                connectionStatus.className = 'connection-status online';
-            } else {
-                connectionStatus.textContent = 'Offline';
-                connectionStatus.className = 'connection-status offline';
-            }
-        }
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
 
-        window.addEventListener('online', updateConnectionStatus);
-        window.addEventListener('offline', updateConnectionStatus);
-        updateConnectionStatus();
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
 
-        // Service Worker Registration
-        if ('serviceWorker' in navigator) {
-            // Create service worker as blob
-            const swCode = `
-                const CACHE_NAME = 'pwa-cache-v1';
-                const urlsToCache = [
-                    '/',
-                    '/offline.html'
-                ];
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
 
-                self.addEventListener('install', (event) => {
-                    event.waitUntil(
-                        caches.open(CACHE_NAME)
-                            .then((cache) => {
-                                console.log('Opened cache');
-                                return cache.addAll(urlsToCache);
-                            })
-                            .catch((error) => {
-                                console.log('Cache failed:', error);
-                            })
-                    );
-                });
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
 
-                self.addEventListener('fetch', (event) => {
-                    event.respondWith(
-                        caches.match(event.request)
-                            .then((response) => {
-                                if (response) {
-                                    return response;
-                                }
-                                return fetch(event.request).catch(() => {
-                                    if (event.request.destination === 'document') {
-                                        return caches.match('/offline.html');
-                                    }
-                                });
-                            })
-                    );
-                });
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
 
-                self.addEventListener('activate', (event) => {
-                    event.waitUntil(
-                        caches.keys().then((cacheNames) => {
-                            return Promise.all(
-                                cacheNames.map((cacheName) => {
-                                    if (cacheName !== CACHE_NAME) {
-                                        return caches.delete(cacheName);
-                                    }
-                                })
-                            );
-                        })
-                    );
-                });
-            `;
+/* Focus styles for accessibility */
+button:focus,
+input:focus,
+select:focus {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
 
-            const blob = new Blob([swCode], { type: 'application/javascript' });
-            const swUrl = URL.createObjectURL(blob);
+/* Loading animation */
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0,0,0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -30px, 0);
+  }
+  70% {
+    transform: translate3d(0, -15px, 0);
+  }
+  90% {
+    transform: translate3d(0,-4px,0);
+  }
+}
 
-            navigator.serviceWorker.register(swUrl)
-                .then((registration) => {
-                    console.log('ServiceWorker registration successful:', registration.scope);
-                    pwaStatus.textContent = 'PWA Ready with Service Worker';
-                })
-                .catch((error) => {
-                    console.log('ServiceWorker registration failed:', error);
-                    pwaStatus.textContent = 'PWA Ready (Service Worker Failed)';
-                });
-        }
+.animate-bounce {
+  animation: bounce 1s infinite;
+}
 
-        // Cleanup blob URL after registration
-        setTimeout(() => {
-            if (typeof swUrl !== 'undefined') {
-                URL.revokeObjectURL(swUrl);
-            }
-        }, 1000);
+/* Custom styles for range input */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
 
-        // Add some interactive animations
-        document.querySelectorAll('.feature-card').forEach(card => {
-            card.addEventListener('click', () => {
-                card.style.transform = 'scale(0.95)';
-                setTimeout(() => {
-                    card.style.transform = '';
-                }, 150);
-            });
-        });
+input[type="range"]::-webkit-slider-track {
+  background: #e5e7eb;
+  height: 8px;
+  border-radius: 4px;
+}
 
-        // Smooth scroll for better UX
-        document.documentElement.style.scrollBehavior = 'smooth';
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #4f46e5;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
 
-        // Add touch gestures for mobile
-        let touchStartY = 0;
-        document.addEventListener('touchstart', (e) => {
-            touchStartY = e.touches[0].clientY;
-        });
+input[type="range"]::-moz-range-track {
+  background: #e5e7eb;
+  height: 8px;
+  border-radius: 4px;
+  border: none;
+}
 
-        document.addEventListener('touchend', (e) => {
-            const touchEndY = e.changedTouches[0].clientY;
-            const diff = touchStartY - touchEndY;
-            
-            if (Math.abs(diff) > 50) {
-                document.body.style.transform = `translateY(${diff > 0 ? '-5px' : '5px'})`;
-                setTimeout(() => {
-                    document.body.style.transform = '';
-                }, 200);
-            }
-        });
-
-        console.log('PWA initialized successfully!');
-    </script>
-</body>
-</html>
+input[type="range"]::-moz-range-thumb {
+  background: #4f46e5;
+  height
