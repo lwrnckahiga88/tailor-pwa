@@ -1,7 +1,7 @@
 {
   "name": "my-netlify-pwa-agent",
   "version": "1.0.0",
-  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions and OpenAI",
+  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
   "main": "netlify/functions/pwa-agent.js",
   "scripts": {
     "dev": "netlify dev",
@@ -9,6 +9,7 @@
     "start": "netlify dev"
   },
   "dependencies": {
+    "express": "^4.19.2",
     "openai": "^4.8.0"
   },
   "devDependencies": {},
@@ -20,6 +21,7 @@
     "openai",
     "netlify",
     "serverless",
+    "express",
     "ai",
     "generator"
   ],
