@@ -5,7 +5,7 @@
   "main": "netlify/functions/pwa-agent.js",
   "scripts": {
     "dev": "netlify dev",
-    "build": "mkdir -p dist && cp -r public/* dist/",
+    "build": "mkdir -p dist && cp -r Public/* dist/",
     "start": "netlify dev"
   },
   "dependencies": {
