@@ -1,0 +1,28 @@
+{
+  "name": "my-netlify-pwa-agent",
+  "version": "1.0.0",
+  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions and OpenAI",
+  "main": "netlify/functions/pwa-agent.js",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'No build step needed for vanilla PWA'",
+    "start": "netlify dev"
+  },
+  "dependencies": {
+    "openai": "^4.8.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "pwa",
+    "openai",
+    "netlify",
+    "serverless",
+    "ai",
+    "generator"
+  ],
+  "author": "YourName",
+  "license": "MIT"
+}
