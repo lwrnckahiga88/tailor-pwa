@@ -84,3 +84,20 @@ pre.flash {
   0% { background-color: #0f0; color: black; }
   100% { background-color: black; color: #0f0; }
 }
+.flash-success {
+  animation: flashGreen 0.4s ease-in-out;
+}
+
+.flash-error {
+  animation: flashRed 0.4s ease-in-out;
+}
+
+@keyframes flashGreen {
+  0% { background-color: lime; color: black; }
+  100% { background-color: black; color: #0f0; }
+}
+
+@keyframes flashRed {
+  0% { background-color: red; color: white; }
+  100% { background-color: black; color: #0f0; }
+}
