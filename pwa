@@ -1,671 +1,189 @@
-{
-  "name": "tailor-pwa",
-  "version": "1.0.0",
-  "private": true,
-  "homepage": ".",
-  "dependencies": {
-    "@react-three/drei": "^9.77.5",
-    "@react-three/fiber": "^8.14.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "^5.0.1",
-    "three": "^0.155.0",
-    "web-vitals": "^3.3.2"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build && cp build/* dist/ 2>/dev/null || mkdir -p dist && cp -r build/* dist/",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "predeploy": "npm run build"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  }
-[build]
-  publish = "build"
-  command = "npm run build"
+const fs = require("fs");
+const path = require("path");
+const express = require("express");
+const archiver = require("archiver");
+const axios = require("axios");
+const readline = require("readline");
+const { OpenAI } = require("openai");
+const { create } = require("ipfs-http-client");
+const { execSync } = require("child_process");
+require("dotenv").config();
 
-[build.environment]
-  NODE_VERSION = "18"
-  NPM_VERSION = "9"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/manifest.json"
-  [headers.values]
-    Content-Type = "application/manifest+json"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000"
-
-}
-
-const CACHE_NAME = 'shoe-customizer-pwa-v1.0.0';
-const STATIC_CACHE_NAME = 'static-v1';
-
-// Assets to cache on install
-const STATIC_ASSETS = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json'
+// Auto-install required packages
+const requiredPackages = [
+  "openai", "express", "archiver", "dotenv", "ipfs-http-client", "axios"
 ];
 
-// Install event - cache static assets
-self.addEventListener('install', (event) => {
-  console.log('[SW] Installing...');
-  event.waitUntil(
-    caches.open(STATIC_CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .catch((error) => {
-        console.log('[SW] Failed to cache assets:', error);
-      })
-  );
-  self.skipWaiting();
-});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating...');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && cacheName !== STATIC_CACHE_NAME) {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
-});
-
-// Fetch event - serve cached content when offline
-self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
-
-  // Handle navigation requests
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return caches.match('/');
-        })
-    );
-    return;
-  }
-
-  // Handle other requests with cache-first strategy
-  event.respondWith(
-    caches.match(event.request)
-      .then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        
-        return fetch(event.request)
-          .then((response) => {
-            // Don't cache if not a valid response
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-
-            // Clone the response
-            const responseToCache = response.clone();
-
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
-
-            return response;
-          })
-          .catch((error) => {
-            console.log('[SW] Fetch failed:', error);
-            // Return a fallback response if available
-            if (event.request.destination === 'document') {
-              return caches.match('/');
-            }
-          });
-      })
-  );
-});
-
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'background-sync') {
-    console.log('[SW] Background sync triggered');
-    event.waitUntil(
-      // Handle background sync logic here
-      Promise.resolve()
-    );
+requiredPackages.forEach(pkg => {
+  try {
+    require.resolve(pkg);
+  } catch (e) {
+    console.log(`📦 Installing ${pkg}...`);
+    execSync(`npm install ${pkg}`, { stdio: "inherit" });
   }
 });
 
-// Push notification handling
-self.addEventListener('push', (event) => {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: '/logo192.png',
-      badge: '/logo192.png',
-      vibrate: [100, 50, 100],
-      data: {
-        dateOfArrival: Date.now(),
-        primaryKey: 1
-      }
-    };
-    
-    event.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
-  }
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const publicDir = path.join(__dirname, "public");
 
-// Notification click handling
-self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification click received.');
-  
-  event.notification.close();
-  
-  event.waitUntil(
-    clients.openWindow('/')
-  );
-});
-
-import React, { useState, useEffect, Suspense, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
-import * as THREE from 'three';
-
-// ======================== Components ========================
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
-      <div className="text-center">
-        <div className="inline-flex space-x-2 mb-4">
-          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce"></div>
-          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-        </div>
-        <p className="text-gray-600 text-lg">Loading 3D Shoe Customizer...</p>
-      </div>
-    </div>
-  );
+// Setup public folder and .env.example
+if (!fs.existsSync(publicDir)) {
+  fs.mkdirSync(publicDir);
+  console.log("📁 Created public/ folder.");
 }
 
-function ShoeModel({ config }) {
-  const meshRef = useRef();
-  const upperRef = useRef();
-  const soleRef = useRef();
-  
-  useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.2;
-    }
+if (!fs.existsSync(".env.example")) {
+  fs.writeFileSync(".env.example", `# Rename this file to .env and fill in the keys
+OPENAI_API_KEY=your_openai_api_key
+NETLIFY_AUTH_TOKEN=your_netlify_token
+NETLIFY_SITE_ID=your_netlify_site_id
+`);
+  console.log("🔐 Created .env.example");
+}
+
+// === 1. Clarify Prompt ===
+async function clarifyPrompt(userPrompt) {
+  const chat = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: "You help clarify vague app ideas into specific PWA requirements." },
+      { role: "user", content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"` }
+    ]
   });
+  return chat.choices[0].message.content.trim();
+}
 
-  const getShoeGeometry = (type) => {
-    switch (type) {
-      case 'boot': return { upper: [2, 1.2, 4], sole: [2.2, 0.4, 4.2] };
-      case 'dress': return { upper: [1.8, 0.7, 4.2], sole: [2, 0.2, 4.4] };
-      case 'casual': return { upper: [2.1, 0.9, 3.8], sole: [2.3, 0.3, 4] };
-      default: return { upper: [2, 0.8, 4], sole: [2.2, 0.3, 4.2] };
-    }
-  };
+// === 2. Generate PWA Files ===
+async function generatePWA(prompt) {
+  const chat = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: `You're a PWA generator. Return JSON:
+{
+  "html": "...",
+  "js": "...",
+  "manifest": "...",
+  "sw": "...",
+  "css": "..."
+}`
+      },
+      { role: "user", content: prompt }
+    ]
+  });
+  return JSON.parse(chat.choices[0].message.content.trim());
+}
 
-  const geometry = getShoeGeometry(config.type);
+// === 3. Write Files ===
+function writeFiles(files) {
+  if (fs.existsSync(publicDir)) fs.rmSync(publicDir, { recursive: true });
+  fs.mkdirSync(publicDir);
 
-  return (
-    <group ref={meshRef} dispose={null}>
-      <mesh ref={upperRef} position={[0, 0, 0]}>
-        <boxGeometry args={geometry.upper} />
-        <meshStandardMaterial 
-          color={config.primaryColor}
-          roughness={config.material === 'leather' ? 0.8 : config.material === 'canvas' ? 0.9 : 0.2}
-          metalness={config.material === 'synthetic' ? 0.3 : 0.1}
-        />
-      </mesh>
-      
-      <mesh ref={soleRef} position={[0, -0.5, 0]}>
-        <boxGeometry args={geometry.sole} />
-        <meshStandardMaterial color={config.secondaryColor} roughness={0.9} />
-      </mesh>
-      
-      {(config.type === 'sneaker' || config.type === 'casual') && (
-        <>
-          <mesh position={[0, 0.2, 1.5]}>
-            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
-            <meshStandardMaterial color="#2d2d2d" />
-          </mesh>
-          <mesh position={[0, 0.2, 1]}>
-            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
-            <meshStandardMaterial color="#2d2d2d" />
-          </mesh>
-          <mesh position={[0, 0.2, 0.5]}>
-            <cylinderGeometry args={[0.02, 0.02, 0.3]} />
-            <meshStandardMaterial color="#2d2d2d" />
-          </mesh>
-        </>
-      )}
-    </group>
+  fs.writeFileSync(path.join(publicDir, "index.html"), files.html);
+  fs.writeFileSync(path.join(publicDir, "app.js"), files.js);
+  fs.writeFileSync(path.join(publicDir, "manifest.json"), files.manifest);
+  fs.writeFileSync(path.join(publicDir, "service-worker.js"), files.sw);
+  fs.writeFileSync(path.join(publicDir, "style.css"), files.css || "");
+  console.log("📁 Files written to public/");
+}
+
+// === 4. Serve Locally ===
+function servePWA() {
+  const app = express();
+  app.use(express.static("public"));
+  app.listen(3000, () =>
+    console.log("🌐 Local PWA running at: http://localhost:3000")
   );
 }
 
-function ShoeCustomizer({ config }) {
-  return (
-    <div className="w-full h-96 rounded-xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-50 to-gray-100">
-      <Canvas
-        camera={{ position: [5, 2, 5], fov: 50 }}
-        shadows
-        gl={{ antialias: true }}
-      >
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.2} />
-        <ShoeModel config={config} />
-        <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={10} blur={2.5} />
-        <Environment preset="studio" />
-        <OrbitControls enablePan enableZoom enableRotate minDistance={3} maxDistance={15} />
-      </Canvas>
-    </div>
-  );
-}
+// === 5. Zip Project ===
+function zipFiles() {
+  return new Promise((resolve, reject) => {
+    const output = fs.createWriteStream("output.zip");
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
-function ControlPanel({ config, onChange }) {
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    onChange({
-      [name]: type === 'number' ? parseInt(value) : value
+    archive.pipe(output);
+    archive.directory("public/", false);
+    archive.finalize();
+
+    output.on("close", () => {
+      console.log("📦 Project zipped as output.zip");
+      resolve();
     });
-  };
 
-  return (
-    <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
-      <h3 className="text-2xl font-bold text-gray-800 mb-6">Customize Your Shoe</h3>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Shoe Type:</label>
-          <select 
-            name="type"
-            value={config.type} 
-            onChange={handleChange}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="sneaker">Sneaker</option>
-            <option value="boot">Boot</option>
-            <option value="dress">Dress Shoe</option>
-            <option value="casual">Casual</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color:</label>
-          <div className="flex items-center space-x-3">
-            <input
-              type="color"
-              name="primaryColor"
-              value={config.primaryColor}
-              onChange={handleChange}
-              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
-            />
-            <span className="text-sm text-gray-600">{config.primaryColor}</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color:</label>
-          <div className="flex items-center space-x-3">
-            <input
-              type="color"
-              name="secondaryColor"
-              value={config.secondaryColor}
-              onChange={handleChange}
-              className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
-            />
-            <span className="text-sm text-gray-600">{config.secondaryColor}</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">Material:</label>
-          <div className="grid grid-cols-3 gap-3">
-            {['leather', 'canvas', 'synthetic'].map(material => (
-              <label key={material} className="flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="radio"
-                  name="material"
-                  value={material}
-                  checked={config.material === material}
-                  onChange={handleChange}
-                  className="sr-only"
-                />
-                <span className={`text-sm font-medium ${config.material === material ? 'text-indigo-600' : 'text-gray-600'}`}>
-                  {material.charAt(0).toUpperCase() + material.slice(1)}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Size:</label>
-          <div className="space-y-2">
-            <input
-              type="range"
-              name="size"
-              min="6"
-              max="13"
-              value={config.size}
-              onChange={handleChange}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>6</span>
-              <span className="font-medium text-indigo-600">Size {config.size}</span>
-              <span>13</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ======================== Main App Component ========================
-export default function App() {
-  const [shoeConfig, setShoeConfig] = useState({
-    type: 'sneaker',
-    primaryColor: '#4f46e5',
-    secondaryColor: '#ffffff',
-    material: 'leather',
-    size: 9
+    archive.on("error", reject);
   });
+}
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+// === 6. Deploy to Netlify ===
+async function deployToNetlify() {
+  const formData = new FormData();
+  const files = fs.readdirSync(publicDir);
+  for (const file of files) {
+    formData.append(file, fs.createReadStream(path.join(publicDir, file)));
+  }
 
-  useEffect(() => {
-    // Handle installation prompt
-    const handleBeforeInstallPrompt = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    // Handle network status
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Simulate loading
-    const timer = setTimeout(() => setIsLoading(false), 2000);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearTimeout(timer);
-    };
-  }, []);
-
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('User accepted install');
-        } else {
-          console.log('User dismissed install');
-        }
-        setDeferredPrompt(null);
-        setIsInstallable(false);
-      });
-    }
+  const headers = {
+    Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+    ...formData.getHeaders?.()
   };
 
-  const handleConfigChange = (newConfig) => {
-    setShoeConfig(prev => ({ ...prev, ...newConfig }));
-  };
+  try {
+    const res = await axios.post(
+      `https://api.netlify.com/api/v1/sites/${process.env.NETLIFY_SITE_ID}/deploys`,
+      formData,
+      { headers }
+    );
 
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50">
-      {/* PWA Installation Banner */}
-      {isInstallable && (
-        <div className="bg-indigo-600 text-white p-3 text-center">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <span>Install this app for a better experience</span>
-            <button 
-              onClick={handleInstallClick}
-              className="ml-4 px-4 py-2 bg-white text-indigo-600 rounded-lg font-medium hover:bg-gray-100 transition-colors"
-            >
-              Install
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Offline Notification */}
-      {isOffline && (
-        <div className="bg-yellow-500 text-white p-3 text-center">
-          You are currently offline. Some features may be limited.
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              3D Shoe Customizer
-            </h1>
-            <p className="text-lg text-gray-600">
-              Design your perfect custom shoes in real-time
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
-            <ControlPanel config={shoeConfig} onChange={handleConfigChange} />
-          </div>
-          
-          <div className="lg:col-span-2">
-            <div className="space-y-4">
-              <Suspense fallback={
-                <div className="w-full h-96 bg-gray-100 rounded-xl flex items-center justify-center">
-                  <div className="text-gray-500">Loading 3D Model...</div>
-                </div>
-              }>
-                <ShoeCustomizer config={shoeConfig} />
-              </Suspense>
-              
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
-                    <span>Rotate: Left click + drag</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span>Zoom: Mouse wheel</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <span>Pan: Right click + drag</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center text-gray-600">
-            <p>&copy; {new Date().getFullYear()} 3D Shoe Customizer PWA</p>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-/* Reset and base styles */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  line-height: 1.6;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Focus styles for accessibility */
-button:focus,
-input:focus,
-select:focus {
-  outline: 2px solid #4f46e5;
-  outline-offset: 2px;
-}
-
-/* Loading animation */
-@keyframes bounce {
-  0%, 20%, 53%, 80%, 100% {
-    transform: translate3d(0,0,0);
-  }
-  40%, 43% {
-    transform: translate3d(0, -30px, 0);
-  }
-  70% {
-    transform: translate3d(0, -15px, 0);
-  }
-  90% {
-    transform: translate3d(0,-4px,0);
+    console.log("🚀 Netlify deployed:", res.data.deploy_ssl_url);
+    return res.data.deploy_ssl_url;
+  } catch (err) {
+    console.error("❌ Netlify deployment failed:", err.message);
+    return null;
   }
 }
 
-.animate-bounce {
-  animation: bounce 1s infinite;
+// === 7. Upload to IPFS ===
+async function uploadToIPFS() {
+  const ipfs = create({ url: "https://ipfs.infura.io:5001" });
+  const files = fs.readdirSync(publicDir).map((file) => ({
+    path: file,
+    content: fs.readFileSync(path.join(publicDir, file)),
+  }));
+
+  const { cid } = await ipfs.addAll(files, { wrapWithDirectory: true }).next();
+  const ipfsUrl = `https://ipfs.io/ipfs/${cid.value.toString()}`;
+  console.log("📡 IPFS uploaded:", ipfsUrl);
+  return ipfsUrl;
 }
 
-/* Custom styles for range input */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  cursor: pointer;
+// === Main Agent ===
+async function runAgent() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  rl.question("🤖 Describe your PWA app: ", async (userPrompt) => {
+    rl.close();
+
+    console.log("\n🧠 Clarifying prompt...");
+    const refinedPrompt = await clarifyPrompt(userPrompt);
+    console.log("✏️ Refined:", refinedPrompt);
+
+    console.log("\n🛠 Generating PWA files...");
+    const files = await generatePWA(refinedPrompt);
+
+    writeFiles(files);
+    servePWA();
+    await zipFiles();
+
+    console.log("\n🌍 Deploying to Netlify...");
+    await deployToNetlify();
+
+    console.log("\n📡 Uploading to IPFS...");
+    await uploadToIPFS();
+
+    console.log("\n✅ All done! Your AI-generated PWA is ready.");
+  });
 }
 
-input[type="range"]::-webkit-slider-track {
-  background: #e5e7eb;
-  height: 8px;
-  border-radius: 4px;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  background: #4f46e5;
-  height: 20px;
-  width: 20px;
-  border-radius: 50%;
-  border: 2px solid #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-input[type="range"]::-moz-range-track {
-  background: #e5e7eb;
-  height: 8px;
-  border-radius: 4px;
-  border: none;
-}
-
-input[type="range"]::-moz-range-thumb {
-  background: #4f46e5;
-  height
+runAgent();
