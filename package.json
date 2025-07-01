@@ -11,30 +11,9 @@
   "dependencies": {
     "express": "^4.19.2",
     "openai": "^4.8.0",
-    "archiver": "{version}"
+    "archiver": "^5.3.1"
   },
-  "devDependencies": {}, 
-  "engines": {
-    "node": ">=18"
-  },
-  "keywords": [
-    "pwa",
-    "openai"{
-  "name": "my-netlify-pwa-agent",
-  "version": "1.0.0",
-  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
-  "main": "netlify/functions/pwa-agent.js",
-  "scripts": {
-    "dev": "netlify dev",
-    "build": "echo 'No build step needed for vanilla PWA'",
-    "start": "netlify dev"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "openai": "^4.8.0",
-    "archiver": "{version}"
-  },
-  "devDependencies": {}, 
+  "devDependencies": {},
   "engines": {
     "node": ">=18"
   },
@@ -47,78 +26,6 @@
     "ai",
     "generator"
   ],
-  "author": "YourName",
-  "license": "MIT"
-}
-,
-    "netlify",
-    "serverless",
-    "express",
-    "ai",
-    "generator"
-  ],{
-  "name": "my-netlify-pwa-agent",
-  "version": "1.0.0",
-  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
-  "main": "netlify/functions/pwa-agent.js",
-  "scripts": {
-    "dev": "netlify dev",
-    "build": "echo 'No build step needed for vanilla PWA'",
-    "start": "netlify dev"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "openai": "^4.8.0",
-    "archiver": "{version}"
-  },
-  "devDependencies": {}, 
-  "engines": {
-    "node": ">=18"
-  },
-  "keywords": [
-    "pwa",
-    "openai"{
-  "name": "my-netlify-pwa-agent",
-  "version": "1.0.0",
-  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
-  "main": "netlify/functions/pwa-agent.js",
-  "scripts": {
-    "dev": "netlify dev",
-    "build": "echo 'No build step needed for vanilla PWA'",
-    "start": "netlify dev"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "openai": "^4.8.0",
-    "archiver": "{version}"
-  },
-  "devDependencies": {}, 
-  "engines": {
-    "node": ">=18"
-  },
-  "keywords": [
-    "pwa",
-    "openai",
-    "netlify",
-    "serverless",
-    "express",
-    "ai",
-    "generator"
-  ],
-  "author": "YourName",
-  "license": "MIT"
-}
-,
-    "netlify",
-    "serverless",
-    "express",
-    "ai",
-    "generator"
-  ],
-  "author": "YourName",
-  "license": "MIT"
-}
-
   "author": "YourName",
   "license": "MIT"
 }
