@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI PWA Generator</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/png" href="icon.png" />
+</head>
+<body>
+  <main>
+    <h1>🧠 AI PWA Generator</h1>
+    <p>Describe the app you want and let the AI generate a PWA.</p>
+
+    <textarea id="prompt" rows="5" placeholder="e.g., A weather app that shows local forecasts and works offline..."></textarea>
+    <button id="generateBtn">⚙️ Generate PWA</button>
+
+    <pre id="log">🔍 Waiting for your prompt...</pre>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
