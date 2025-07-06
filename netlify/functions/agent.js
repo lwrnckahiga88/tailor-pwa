@@ -33,7 +33,7 @@ if (!fs.existsSync(publicDir)) {
 if (!fs.existsSync(".env.example")) {
   fs.writeFileSync(".env.example", `# Rename this file to .env and fill in the keys
 MINDSDB_API_KEY=your_mindsdb_api_key
-MINDSDB_API_URL='https://llm.mdb.ai'
+MINDSDB_API_URL=https://llm.mdb.ai
 NETLIFY_AUTH_TOKEN=your_netlify_token
 NETLIFY_SITE_ID=your_netlify_site_id
 `);
@@ -42,13 +42,21 @@ NETLIFY_SITE_ID=your_netlify_site_id
 
 // === 1. Clarify Prompt using MindsDB ===
 async function clarifyPrompt(userPrompt) {
+  const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
+
   const res = await axios.post(
-    process.env.MINDSDB_API_URL,
+    apiUrl,
     {
       model: "chat",
       messages: [
-        { role: "system", content: "You help clarify vague app ideas into specific PWA requirements." },
-        { role: "user", content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"` }
+        {
+          role: "system",
+          content: "You help clarify vague app ideas into specific PWA requirements."
+        },
+        {
+          role: "user",
+          content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"`
+        }
       ]
     },
     {
@@ -58,13 +66,16 @@ async function clarifyPrompt(userPrompt) {
       }
     }
   );
+
   return res.data.choices[0].message.content.trim();
 }
 
 // === 2. Generate PWA Files using MindsDB ===
 async function generatePWA(prompt) {
+  const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
+
   const res = await axios.post(
-    process.env.MINDSDB_API_URL,
+    apiUrl,
     {
       model: "chat",
       messages: [
@@ -89,6 +100,7 @@ async function generatePWA(prompt) {
       }
     }
   );
+
   return JSON.parse(res.data.choices[0].message.content.trim());
 }
 
