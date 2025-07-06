@@ -33,7 +33,7 @@ if (!fs.existsSync(publicDir)) {
 if (!fs.existsSync(".env.example")) {
   fs.writeFileSync(".env.example", `# Rename this file to .env and fill in the keys
 MINDSDB_API_KEY=your_mindsdb_api_key
-MINDSDB_API_URL=https://llm.mdb.ai
+MINDSDB_API_URL='https://llm.mdb.ai'
 NETLIFY_AUTH_TOKEN=your_netlify_token
 NETLIFY_SITE_ID=your_netlify_site_id
 `);
