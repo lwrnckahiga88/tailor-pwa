@@ -1,12 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const archiver = require("archiver");
 const axios = require("axios");
-const { create } = require("ipfs-http-client");
 require("dotenv").config();
 
+// Optional: for PWA output later
 const publicDir = path.join(__dirname, "..", "..", "public");
 
+// === 1. Clarify Prompt using MindsDB ===
 async function clarifyPrompt(userPrompt) {
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
 
@@ -33,9 +33,10 @@ async function clarifyPrompt(userPrompt) {
     }
   );
 
-  return res.data.choices[0].message.content.trim();
+  return res.data.choices?.[0]?.message?.content?.trim();
 }
 
+// === 2. Generate PWA Files ===
 async function generatePWA(prompt) {
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
 
@@ -66,15 +67,15 @@ async function generatePWA(prompt) {
     }
   );
 
-  return JSON.parse(res.data.choices[0].message.content.trim());
+  return JSON.parse(res.data.choices?.[0]?.message?.content?.trim());
 }
 
-// Netlify handler
+// === Netlify Lambda Handler ===
 exports.handler = async (event, context) => {
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
-      body: "Method Not Allowed"
+      body: JSON.stringify({ error: "Method Not Allowed" })
     };
   }
 
@@ -89,27 +90,25 @@ exports.handler = async (event, context) => {
       };
     }
 
-    if (action === "clarify") {
-      const content = await clarifyPrompt(prompt);
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ content })
-      };
-    }
+    let content;
 
-    if (action === "generate") {
-      const content = await generatePWA(prompt);
+    if (action === "clarify") {
+      content = await clarifyPrompt(prompt);
+    } else if (action === "generate") {
+      content = await generatePWA(prompt);
+    } else {
       return {
-        statusCode: 200,
-        body: JSON.stringify({ content })
+        statusCode: 400,
+        body: JSON.stringify({ error: "Invalid action specified" })
       };
     }
 
     return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Invalid action" })
+      statusCode: 200,
+      body: JSON.stringify({ content })
     };
   } catch (err) {
+    console.error("❌ Function error:", err.message);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message || "Internal Server Error" })
