@@ -19,6 +19,55 @@
     <pre id="log">🔍 Waiting for your prompt...</pre>
   </main>
 
-  <script src="app.js"></script>
+  <script>
+    const promptInput = document.getElementById("prompt");
+    const generateBtn = document.getElementById("generateBtn");
+    const log = document.getElementById("log");
+
+    generateBtn.addEventListener("click", async () => {
+      const userPrompt = promptInput.value.trim();
+      if (!userPrompt) return alert("Please enter a prompt first.");
+
+      log.textContent = "🧠 Clarifying your idea...";
+
+      try {
+        // Step 1: Clarify
+        const clarifyRes = await fetch("/.netlify/functions/mindsdb-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "clarify", prompt: userPrompt })
+        });
+        const clarifyData = await clarifyRes.json();
+        const refinedPrompt = clarifyData.content;
+
+        log.textContent = "🛠 Generating PWA files...\n\n" + refinedPrompt;
+
+        // Step 2: Generate
+        const generateRes = await fetch("/.netlify/functions/mindsdb-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "generate", prompt: refinedPrompt })
+        });
+        const generateData = await generateRes.json();
+        const files = generateData.content;
+
+        // Show a simple log (or extend this to download or preview)
+        log.textContent = `✅ Generated PWA Files:
+- index.html
+- app.js
+- manifest.json
+- service-worker.js
+- style.css
+
+📄 index.html preview:
+
+${files.html.slice(0, 400)}...
+`;
+      } catch (err) {
+        log.textContent = `❌ Error: ${err.message}`;
+        console.error(err);
+      }
+    });
+  </script>
 </body>
 </html>
