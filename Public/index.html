@@ -43,7 +43,7 @@
         log.textContent = "🛠 Generating PWA files...\n\n" + refinedPrompt;
 
         // Step 2: Generate
-        const generateRes = await fetch("/.netlify/functions/mindsdb-chat", {
+        const generateRes = await fetch("/.netlify/functions/agent.js", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "generate", prompt: refinedPrompt })
