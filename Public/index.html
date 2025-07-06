@@ -32,7 +32,7 @@
 
       try {
         // Step 1: Clarify
-        const clarifyRes = await fetch("/.netlify/functions/mindsdb-chat", {
+        const clarifyRes = await fetch("/.netlify/functions/agent.js", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "clarify", prompt: userPrompt })
