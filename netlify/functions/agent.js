@@ -4,14 +4,13 @@ const express = require("express");
 const archiver = require("archiver");
 const axios = require("axios");
 const readline = require("readline");
-const { OpenAI } = require("openai");
 const { create } = require("ipfs-http-client");
 const { execSync } = require("child_process");
 require("dotenv").config();
 
 // Auto-install required packages
 const requiredPackages = [
-  "openai", "express", "archiver", "dotenv", "ipfs-http-client", "axios"
+  "express", "archiver", "dotenv", "ipfs-http-client", "axios"
 ];
 
 requiredPackages.forEach(pkg => {
@@ -23,7 +22,6 @@ requiredPackages.forEach(pkg => {
   }
 });
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const publicDir = path.join(__dirname, "public");
 
 // Setup public folder and .env.example
@@ -35,32 +33,44 @@ if (!fs.existsSync(publicDir)) {
 if (!fs.existsSync(".env.example")) {
   fs.writeFileSync(".env.example", `# Rename this file to .env and fill in the keys
 MINDSDB_API_KEY=your_mindsdb_api_key
+MINDSDB_API_URL=https://cloud.mindsdb.com/api/chat-completions
 NETLIFY_AUTH_TOKEN=your_netlify_token
 NETLIFY_SITE_ID=your_netlify_site_id
 `);
   console.log("🔐 Created .env.example");
 }
 
-// === 1. Clarify Prompt ===
+// === 1. Clarify Prompt using MindsDB ===
 async function clarifyPrompt(userPrompt) {
-  const chat = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: "You help clarify vague app ideas into specific PWA requirements." },
-      { role: "user", content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"` }
-    ]
-  });
-  return chat.choices[0].message.content.trim();
+  const res = await axios.post(
+    process.env.MINDSDB_API_URL,
+    {
+      model: "chat",
+      messages: [
+        { role: "system", content: "You help clarify vague app ideas into specific PWA requirements." },
+        { role: "user", content: `Clarify this prompt so it's specific enough to generate a real PWA: "${userPrompt}"` }
+      ]
+    },
+    {
+      headers: {
+        "Authorization": `Bearer ${process.env.MINDSDB_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+  return res.data.choices[0].message.content.trim();
 }
 
-// === 2. Generate PWA Files ===
+// === 2. Generate PWA Files using MindsDB ===
 async function generatePWA(prompt) {
-  const chat = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content: `You're a PWA generator. Return JSON:
+  const res = await axios.post(
+    process.env.MINDSDB_API_URL,
+    {
+      model: "chat",
+      messages: [
+        {
+          role: "system",
+          content: `You're a PWA generator. Return JSON:
 {
   "html": "...",
   "js": "...",
@@ -68,11 +78,18 @@ async function generatePWA(prompt) {
   "sw": "...",
   "css": "..."
 }`
-      },
-      { role: "user", content: prompt }
-    ]
-  });
-  return JSON.parse(chat.choices[0].message.content.trim());
+        },
+        { role: "user", content: prompt }
+      ]
+    },
+    {
+      headers: {
+        "Authorization": `Bearer ${process.env.MINDSDB_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+  return JSON.parse(res.data.choices[0].message.content.trim());
 }
 
 // === 3. Write Files ===
@@ -165,24 +182,28 @@ async function runAgent() {
   rl.question("🤖 Describe your PWA app: ", async (userPrompt) => {
     rl.close();
 
-    console.log("\n🧠 Clarifying prompt...");
-    const refinedPrompt = await clarifyPrompt(userPrompt);
-    console.log("✏️ Refined:", refinedPrompt);
+    try {
+      console.log("\n🧠 Clarifying prompt...");
+      const refinedPrompt = await clarifyPrompt(userPrompt);
+      console.log("✏️ Refined:", refinedPrompt);
 
-    console.log("\n🛠 Generating PWA files...");
-    const files = await generatePWA(refinedPrompt);
+      console.log("\n🛠 Generating PWA files...");
+      const files = await generatePWA(refinedPrompt);
 
-    writeFiles(files);
-    servePWA();
-    await zipFiles();
+      writeFiles(files);
+      servePWA();
+      await zipFiles();
 
-    console.log("\n🌍 Deploying to Netlify...");
-    await deployToNetlify();
+      console.log("\n🌍 Deploying to Netlify...");
+      await deployToNetlify();
 
-    console.log("\n📡 Uploading to IPFS...");
-    await uploadToIPFS();
+      console.log("\n📡 Uploading to IPFS...");
+      await uploadToIPFS();
 
-    console.log("\n✅ All done! Your AI-generated PWA is ready.");
+      console.log("\n✅ All done! Your AI-generated PWA is ready.");
+    } catch (err) {
+      console.error("❌ Error occurred:", err.message);
+    }
   });
 }
 
