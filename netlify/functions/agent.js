@@ -1,33 +1,71 @@
 const axios = require("axios");
-// DO NOT include dotenv in Netlify functions - use Netlify env vars instead
-// require("dotenv").config(); // Remove this line
 
-// Helper function to validate JSON response
-function isValidJSON(str) {
+// Enhanced JSON validation with schema checking
+function isValidJSON(str, schema) {
   try {
-    JSON.parse(str);
+    const obj = JSON.parse(str);
+    if (schema) {
+      return validateAgainstSchema(obj, schema);
+    }
     return true;
   } catch (e) {
     return false;
   }
 }
 
-// Extract JSON from response that might have markdown formatting
-function extractJSON(response) {
-  // Remove markdown code blocks if present
-  const cleanResponse = response.replace(/```json\n?|\n?```/g, '').trim();
-  
-  // Try to find JSON object in the response
-  const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    return jsonMatch[0];
+// Schema validation helper
+function validateAgainstSchema(obj, schema) {
+  for (const key in schema) {
+    if (schema[key].required && !obj[key]) {
+      return false;
+    }
+    if (schema[key].type && typeof obj[key] !== schema[key].type) {
+      return false;
+    }
   }
-  
-  return cleanResponse;
+  return true;
 }
 
+// Enhanced JSON extraction with better error recovery
+function extractJSON(response) {
+  try {
+    // First try parsing directly
+    if (isValidJSON(response)) {
+      return response;
+    }
+    
+    // Clean markdown code blocks
+    const cleanResponse = response
+      .replace(/```(json)?\n?|\n?```/g, '')
+      .trim();
+    
+    // Try to find JSON object in the response
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const potentialJSON = jsonMatch[0];
+      if (isValidJSON(potentialJSON)) {
+        return potentialJSON;
+      }
+    }
+    
+    // Fallback to cleaned response
+    return cleanResponse;
+  } catch (e) {
+    console.error("JSON extraction error:", e);
+    return response; // Return original if all extraction fails
+  }
+}
+
+// PWA Component Schema Definition
+const PWASchema = {
+  html: { required: true, type: 'string' },
+  js: { required: true, type: 'string' },
+  manifest: { required: true, type: 'string' },
+  sw: { required: true, type: 'string' },
+  css: { required: true, type: 'string' }
+};
+
 async function clarifyPrompt(userPrompt) {
-  // Use Netlify environment variables - these are injected at runtime
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
   const apiKey = process.env.MINDSDB_API_KEY;
 
@@ -43,39 +81,52 @@ async function clarifyPrompt(userPrompt) {
         messages: [
           {
             role: "system",
-            content: `You are a helpful assistant that clarifies vague app ideas into specific PWA requirements. 
-            Focus on making the requirements clear, specific, and implementable. 
-            Consider features like offline functionality, responsive design, and mobile-first approach.`
+            content: `You are a PWA requirements specialist. Clarify vague app ideas into specific, implementable PWA requirements.
+            
+            Your clarifications must include:
+            1. Core functionality description
+            2. Key user flows
+            3. Data requirements
+            4. Offline capabilities needed
+            5. Device features to access
+            6. Performance considerations
+            7. Security requirements
+            
+            Format your response as a Markdown list with clear headings.`
           },
           {
             role: "user",
-            content: `Clarify this prompt so it's specific enough to generate a real Progressive Web App: "${userPrompt}"`
+            content: `Clarify this app idea into specific PWA requirements: "${userPrompt}"`
           }
-        ]
+        ],
+        temperature: 0.3 // Lower temperature for more focused responses
       },
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000
       }
     );
 
-    const choices = res.data.choices || [];
-    if (!choices[0]?.message?.content) {
-      throw new Error("Invalid response from MindsDB during clarification.");
+    const content = res.data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty response from API during clarification");
     }
 
-    return choices[0].message.content.trim();
+    return content.trim();
   } catch (error) {
-    console.error("Error in clarifyPrompt:", error.message);
-    throw new Error(`Failed to clarify prompt: ${error.message}`);
+    console.error("ClarifyPrompt Error:", {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    throw new Error(`Clarification failed: ${error.message}`);
   }
 }
 
 async function generatePWA(prompt) {
-  // Use Netlify environment variables - these are injected at runtime
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
   const apiKey = process.env.MINDSDB_API_KEY;
 
@@ -91,81 +142,118 @@ async function generatePWA(prompt) {
         messages: [
           {
             role: "system",
-            content: `You are a PWA generator that creates complete Progressive Web Apps. 
-            Return ONLY valid JSON in this exact format:
+            content: `You are an expert PWA generator. Create production-ready Progressive Web Apps.
+            
+            REQUIREMENTS:
+            1. Return ONLY valid JSON in this exact format:
             {
-              "html": "complete HTML with viewport meta tag and manifest link",
-              "js": "JavaScript with service worker registration",
-              "manifest": "web app manifest JSON as string",
-              "sw": "service worker JavaScript code",
-              "css": "responsive CSS with mobile-first design"
+              "html": "Complete HTML5 document with:
+                - Proper DOCTYPE
+                - Viewport meta tag
+                - Web App Manifest link
+                - Theme-color meta
+                - Semantic structure
+                - Basic app shell
+                - Loading states",
+              "js": "Modern JavaScript (ES6+) with:
+                - Service worker registration
+                - Install prompt handling
+                - Cache strategies
+                - Error boundaries
+                - Accessibility support",
+              "manifest": "Web App Manifest (JSON string) with:
+                - name, short_name
+                - start_url, scope
+                - display (standalone)
+                - icons (192px, 512px)
+                - theme_color, background_color
+                - orientation",
+              "sw": "Service Worker with:
+                - Precaching
+                - Runtime caching
+                - Offline fallback
+                - Versioning
+                - Update handling",
+              "css": "Responsive CSS with:
+                - Mobile-first approach
+                - CSS Variables
+                - Flexbox/Grid
+                - Accessibility
+                - Reduced motion support
+                - Viewport units"
             }
             
-            Make sure:
-            - HTML includes proper PWA meta tags
-            - CSS is responsive and mobile-first
-            - JS includes service worker registration
-            - Manifest includes all required PWA fields
-            - Service worker handles offline functionality
-            - No markdown formatting in response`
+            2. All code must:
+               - Pass Lighthouse PWA audit
+               - Work offline
+               - Be secure (CSP compatible)
+               - Be accessible (WCAG AA)
+               - Support modern browsers
+            3. No explanations, only JSON`
           },
           { 
             role: "user", 
-            content: `Generate a complete PWA for: ${prompt}` 
+            content: `Generate a complete PWA for: ${prompt}`
           }
-        ]
+        ],
+        temperature: 0.2, // Very low temperature for consistent output
+        response_format: { type: "json_object" } // Encourage JSON output
       },
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        timeout: 60000 // 60 second timeout for generation
+        timeout: 60000
       }
     );
 
     const response = res.data.choices?.[0]?.message?.content;
     if (!response) {
-      throw new Error("Invalid response from MindsDB during generation.");
+      throw new Error("Empty response from API during generation");
     }
 
-    try {
-      const jsonString = extractJSON(response);
-      const parsedResponse = JSON.parse(jsonString);
-      
-      // Validate required fields
-      const requiredFields = ['html', 'js', 'manifest', 'sw', 'css'];
-      const missingFields = requiredFields.filter(field => !parsedResponse[field]);
-      
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-      }
-      
-      return parsedResponse;
-    } catch (parseErr) {
-      console.error("JSON Parse Error:", parseErr.message);
-      console.error("Response content:", response);
-      throw new Error(`Failed to parse JSON from MindsDB response: ${parseErr.message}`);
+    const jsonString = extractJSON(response);
+    if (!isValidJSON(jsonString, PWASchema)) {
+      throw new Error("Response does not match required schema");
     }
+
+    const parsedResponse = JSON.parse(jsonString);
+    
+    // Additional content validation
+    if (parsedResponse.html.indexOf('<html') === -1) {
+      throw new Error("HTML appears to be incomplete");
+    }
+    
+    if (parsedResponse.js.indexOf('serviceWorker') === -1) {
+      throw new Error("JavaScript missing service worker registration");
+    }
+
+    return parsedResponse;
   } catch (error) {
-    console.error("Error in generatePWA:", error.message);
-    throw new Error(`Failed to generate PWA: ${error.message}`);
+    console.error("GeneratePWA Error:", {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    throw new Error(`Generation failed: ${error.message}`);
   }
 }
 
 exports.handler = async (event, context) => {
-  // Set CORS headers
+  // Enhanced CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Content-Type-Options': 'nosniff'
   };
 
   // Handle preflight OPTIONS request
   if (event.httpMethod === 'OPTIONS') {
     return {
-      statusCode: 200,
+      statusCode: 204,
       headers,
       body: ''
     };
@@ -175,80 +263,73 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 405,
       headers,
-      body: JSON.stringify({ error: "Method Not Allowed" })
+      body: JSON.stringify({ 
+        error: "Method Not Allowed",
+        allowedMethods: ["POST", "OPTIONS"]
+      })
     };
   }
 
   try {
-    // Validate request body
     if (!event.body) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: "Request body is required" })
-      };
+      throw new Error("Request body is required");
     }
 
     const body = JSON.parse(event.body);
     const { action, prompt } = body;
 
     if (!action || !prompt) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: "Missing action or prompt" })
-      };
+      throw new Error("Both action and prompt are required");
     }
 
-    // Validate environment variables
     if (!process.env.MINDSDB_API_KEY) {
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ error: "MindsDB API key not configured" })
-      };
+      throw new Error("Server configuration error");
     }
 
     let result;
+    const startTime = Date.now();
     
     if (action === "clarify") {
-      const content = await clarifyPrompt(prompt);
-      result = { content };
+      result = { content: await clarifyPrompt(prompt) };
     } else if (action === "generate") {
-      const content = await generatePWA(prompt);
-      result = { content };
+      result = { content: await generatePWA(prompt) };
     } else {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: "Invalid action. Use 'clarify' or 'generate'" })
-      };
+      throw new Error("Invalid action. Use 'clarify' or 'generate'");
     }
 
+    console.log(`Completed ${action} in ${Date.now() - startTime}ms`);
+    
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(result)
+      body: JSON.stringify({
+        success: true,
+        ...result,
+        timestamp: new Date().toISOString()
+      })
     };
 
   } catch (err) {
-    console.error("❌ Error during Netlify function execution:", err);
-    
-    // Return more specific error information
-    const errorResponse = {
-      error: err.message || "Internal Server Error",
-      timestamp: new Date().toISOString()
-    };
-
-    // Only include stack trace in development
-    if (process.env.NODE_ENV === 'development') {
-      errorResponse.details = err.stack;
-    }
+    console.error("Handler Error:", {
+      message: err.message,
+      stack: err.stack,
+      event: {
+        httpMethod: event.httpMethod,
+        path: event.path,
+        query: event.queryStringParameters
+      }
+    });
 
     return {
-      statusCode: 500,
+      statusCode: err.message.includes("Not Allowed") ? 405 : 
+                 err.message.includes("required") ? 400 : 500,
       headers,
-      body: JSON.stringify(errorResponse)
+      body: JSON.stringify({
+        success: false,
+        error: err.message,
+        details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        timestamp: new Date().toISOString()
+      })
     };
   }
 };
