@@ -1,11 +1,5 @@
-const fs = require("fs");
-const path = require("path");
-const archiver = require("archiver");
 const axios = require("axios");
-const { create } = require("ipfs-http-client");
 require("dotenv").config();
-
-const publicDir = path.join(__dirname, "..", "..", "public");
 
 async function clarifyPrompt(userPrompt) {
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
@@ -84,9 +78,27 @@ async function generatePWA(prompt) {
 }
 
 exports.handler = async (event, context) => {
+  // Add CORS headers
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json"
+  };
+
+  // Handle preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers,
+      body: ""
+    };
+  }
+
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
+      headers,
       body: JSON.stringify({ error: "Method Not Allowed" })
     };
   }
@@ -98,6 +110,7 @@ exports.handler = async (event, context) => {
     if (!action || !prompt) {
       return {
         statusCode: 400,
+        headers,
         body: JSON.stringify({ error: "Missing action or prompt" })
       };
     }
@@ -106,6 +119,7 @@ exports.handler = async (event, context) => {
       const content = await clarifyPrompt(prompt);
       return {
         statusCode: 200,
+        headers,
         body: JSON.stringify({ content })
       };
     }
@@ -114,18 +128,21 @@ exports.handler = async (event, context) => {
       const content = await generatePWA(prompt);
       return {
         statusCode: 200,
+        headers,
         body: JSON.stringify({ content })
       };
     }
 
     return {
       statusCode: 400,
+      headers,
       body: JSON.stringify({ error: "Invalid action provided." })
     };
   } catch (err) {
     console.error("❌ Error during Netlify function execution:", err);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({
         error: err.message || "Internal Server Error",
         details: err.stack || null
