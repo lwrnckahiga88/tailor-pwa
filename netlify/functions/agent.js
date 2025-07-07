@@ -1,12 +1,12 @@
 const fs = require("fs");
 const path = require("path");
+const archiver = require("archiver");
 const axios = require("axios");
+const { create } = require("ipfs-http-client");
 require("dotenv").config();
 
-// Optional: for PWA output later
 const publicDir = path.join(__dirname, "..", "..", "public");
 
-// === 1. Clarify Prompt using MindsDB ===
 async function clarifyPrompt(userPrompt) {
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
 
@@ -33,10 +33,14 @@ async function clarifyPrompt(userPrompt) {
     }
   );
 
-  return res.data.choices?.[0]?.message?.content?.trim();
+  const choices = res.data.choices || [];
+  if (!choices[0]?.message?.content) {
+    throw new Error("Invalid response from MindsDB during clarification.");
+  }
+
+  return choices[0].message.content.trim();
 }
 
-// === 2. Generate PWA Files ===
 async function generatePWA(prompt) {
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
 
@@ -67,10 +71,18 @@ async function generatePWA(prompt) {
     }
   );
 
-  return JSON.parse(res.data.choices?.[0]?.message?.content?.trim());
+  const response = res.data.choices?.[0]?.message?.content;
+  if (!response) {
+    throw new Error("Invalid response from MindsDB during generation.");
+  }
+
+  try {
+    return JSON.parse(response.trim());
+  } catch (parseErr) {
+    throw new Error("Failed to parse JSON from MindsDB response: " + parseErr.message);
+  }
 }
 
-// === Netlify Lambda Handler ===
 exports.handler = async (event, context) => {
   if (event.httpMethod !== "POST") {
     return {
@@ -90,28 +102,34 @@ exports.handler = async (event, context) => {
       };
     }
 
-    let content;
-
     if (action === "clarify") {
-      content = await clarifyPrompt(prompt);
-    } else if (action === "generate") {
-      content = await generatePWA(prompt);
-    } else {
+      const content = await clarifyPrompt(prompt);
       return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Invalid action specified" })
+        statusCode: 200,
+        body: JSON.stringify({ content })
+      };
+    }
+
+    if (action === "generate") {
+      const content = await generatePWA(prompt);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ content })
       };
     }
 
     return {
-      statusCode: 200,
-      body: JSON.stringify({ content })
+      statusCode: 400,
+      body: JSON.stringify({ error: "Invalid action provided." })
     };
   } catch (err) {
-    console.error("❌ Function error:", err.message);
+    console.error("❌ Error during Netlify function execution:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message || "Internal Server Error" })
+      body: JSON.stringify({
+        error: err.message || "Internal Server Error",
+        details: err.stack || null
+      })
     };
   }
 };
