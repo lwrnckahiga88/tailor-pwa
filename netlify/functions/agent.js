@@ -1,5 +1,6 @@
 const axios = require("axios");
-require("dotenv").config();
+// DO NOT include dotenv in Netlify functions - use Netlify env vars instead
+// require("dotenv").config(); // Remove this line
 
 // Helper function to validate JSON response
 function isValidJSON(str) {
@@ -26,7 +27,13 @@ function extractJSON(response) {
 }
 
 async function clarifyPrompt(userPrompt) {
+  // Use Netlify environment variables - these are injected at runtime
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
+  const apiKey = process.env.MINDSDB_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("MINDSDB_API_KEY environment variable not set");
+  }
 
   try {
     const res = await axios.post(
@@ -48,7 +55,7 @@ async function clarifyPrompt(userPrompt) {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.MINDSDB_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         timeout: 30000 // 30 second timeout
@@ -68,7 +75,13 @@ async function clarifyPrompt(userPrompt) {
 }
 
 async function generatePWA(prompt) {
+  // Use Netlify environment variables - these are injected at runtime
   const apiUrl = process.env.MINDSDB_API_URL || "https://llm.mdb.ai";
+  const apiKey = process.env.MINDSDB_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("MINDSDB_API_KEY environment variable not set");
+  }
 
   try {
     const res = await axios.post(
@@ -104,7 +117,7 @@ async function generatePWA(prompt) {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.MINDSDB_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         timeout: 60000 // 60 second timeout for generation
