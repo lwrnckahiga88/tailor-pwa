@@ -92,7 +92,7 @@ class CamelAPIClient {
 class MedicalPWAGenerator {
   constructor() {
     this.camelClient = new CamelAPIClient();
-    this.modelPath = process.env.MEDICAL_MODEL_PATH || '/models/clinical-llama-13b';
+    this.modelPath = process.env.MEDICAL_MODEL_PATH || 'https://api.camel.ai/api/v1'
   }
 
   async generateMedicalPWA(prompt, userId = null) {
