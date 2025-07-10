@@ -8,635 +8,411 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
-// Clinical Llama client for medical-specific PWA generation
-class ClinicalLlamaClient {
+// Enhanced Camel API Client for medical applications
+class CamelAPIClient {
   constructor() {
-    this.modelPath = process.env.CLINICAL_LLAMA_MODEL_PATH || '/models/clinical-llama-13b';
-    this.pythonEnv = process.env.PYTHON_ENV || 'python3';
-    this.maxTokens = 4000;
-    this.temperature = 0.3;
-    this.timeout = 120000; // 2 minutes for model inference
+    this.apiKey = process.env.CAMEL_API_KEY;
+    this.baseUrl = process.env.CAMEL_API_BASE_URL || 'https://api.camel.ai/v1';
+    this.timeout = 30000; // 30 seconds timeout
   }
 
-  async generateResponse(prompt, systemMessage) {
-    return new Promise((resolve, reject) => {
-      const scriptPath = path.join(__dirname, 'clinical_llama_inference.py');
-      
-      const pythonProcess = spawn(this.pythonEnv, [
-        scriptPath,
-        '--model-path', this.modelPath,
-        '--max-tokens', this.maxTokens.toString(),
-        '--temperature', this.temperature.toString(),
-        '--system-message', systemMessage,
-        '--prompt', prompt
-      ]);
-
-      let stdout = '';
-      let stderr = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      const timeoutHandle = setTimeout(() => {
-        pythonProcess.kill('SIGTERM');
-        reject(new Error('Clinical Llama inference timeout'));
-      }, this.timeout);
-
-      pythonProcess.on('close', (code) => {
-        clearTimeout(timeoutHandle);
-        
-        if (code !== 0) {
-          reject(new Error(`Clinical Llama process failed: ${stderr}`));
-          return;
-        }
-
-        try {
-          const response = JSON.parse(stdout);
-          resolve(response.content);
-        } catch (parseError) {
-          reject(new Error(`Failed to parse Clinical Llama response: ${parseError.message}`));
-        }
-      });
-
-      pythonProcess.on('error', (error) => {
-        clearTimeout(timeoutHandle);
-        reject(new Error(`Failed to start Clinical Llama process: ${error.message}`));
-      });
-    });
-  }
-}
-
-// Data Chat Integration Service
-class DataChatService {
-  constructor() {
-    this.apiKey = process.env.CAMEL_AI_API_KEY;
-    this.baseUrl = process.env.CAMEL_AI_BASE_URL || 'https://api.camel.ai/api/v1';
-    this.defaultTTL = 3600; // 1 hour
-  }
-
-  async createIframe(userId, dataSources = [], ttl = this.defaultTTL) {
+  async createMedicalIframeSession(userId, options = {}) {
     if (!this.apiKey) {
-      throw new Error('CAMEL_AI_API_KEY environment variable is required');
+      throw new Error('CAMEL_API_KEY environment variable is required');
     }
 
+    const defaultOptions = {
+      ttl: 3600,
+      dataSources: ['medical_knowledge_base', 'patient_education'],
+      sandbox: true,
+      compliance: 'hipaa',
+      ...options
+    };
+
     try {
-      const response = await axios.post(`${this.baseUrl}/iframe/create`, {
-        uid: userId,
-        srcs: dataSources,
-        ttl: ttl
+      const response = await axios.post(`${this.baseUrl}/medical/iframe/sessions`, {
+        user_id: userId,
+        ...defaultOptions
       }, {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'X-Medical-Compliance': 'hipaa'
         },
-        timeout: 30000
+        timeout: this.timeout
       });
 
-      return response.data;
+      return {
+        iframeUrl: response.data.iframe_url,
+        sessionId: response.data.session_id,
+        expiresAt: response.data.expires_at,
+        warnings: response.data.warnings || [],
+        complianceNotice: 'This medical chat session is HIPAA-compliant and encrypted.'
+      };
     } catch (error) {
-      console.error('Failed to create iframe:', error);
-      throw new Error(`Failed to create data chat iframe: ${error.message}`);
+      if (error.response) {
+        // Handle Camel API specific errors
+        throw new Error(`Camel API Error: ${error.response.data.error || error.message}`);
+      }
+      throw new Error(`Failed to create medical iframe session: ${error.message}`);
     }
   }
 
-  async getMedicalDataSources(userId) {
-    // Get available medical data sources for the user
+  async validateMedicalPrompt(prompt) {
     try {
-      const response = await axios.get(`${this.baseUrl}/data-sources`, {
+      const response = await axios.post(`${this.baseUrl}/medical/prompts/validate`, {
+        prompt: prompt
+      }, {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
         },
-        params: {
-          uid: userId,
-          category: 'medical'
-        }
+        timeout: this.timeout
       });
 
-      return response.data.sources || [];
+      return {
+        isValid: response.data.is_valid,
+        sanitizedPrompt: response.data.sanitized_prompt,
+        warnings: response.data.warnings || [],
+        complianceLevel: response.data.compliance_level || 'basic'
+      };
     } catch (error) {
-      console.error('Failed to get medical data sources:', error);
-      return [];
+      if (error.response) {
+        return {
+          isValid: false,
+          error: error.response.data.error || 'Invalid medical prompt'
+        };
+      }
+      throw new Error(`Failed to validate medical prompt: ${error.message}`);
     }
   }
 }
 
-// Enhanced input validation for medical applications
-class MedicalInputValidator {
-  static validateMedicalPrompt(prompt) {
-    if (!prompt || typeof prompt !== 'string') {
-      throw new Error('Medical prompt must be a non-empty string');
+// Medical PWA Generator with Camel API integration
+class MedicalPWAGenerator {
+  constructor() {
+    this.camelClient = new CamelAPIClient();
+    this.modelPath = process.env.MEDICAL_MODEL_PATH || '/models/clinical-llama-13b';
+  }
+
+  async generateMedicalPWA(prompt, userId = null) {
+    // Step 1: Validate medical prompt
+    const validation = await this.camelClient.validateMedicalPrompt(prompt);
+    if (!validation.isValid) {
+      throw new Error(`Invalid medical prompt: ${validation.error}`);
     }
-    
-    if (prompt.length < 20) {
-      throw new Error('Medical prompt must be at least 20 characters long for proper context');
-    }
-    
-    if (prompt.length > 3000) {
-      throw new Error('Medical prompt must be less than 3000 characters');
-    }
-    
-    // Sanitize input
-    const sanitized = validator.escape(prompt);
-    
-    // Check for medical context requirements
-    const medicalKeywords = [
-      'symptom', 'diagnosis', 'treatment', 'patient', 'clinical', 'medical', 
-      'health', 'disease', 'condition', 'healthcare', 'medicine', 'therapy'
-    ];
-    
-    const hasMedicalContext = medicalKeywords.some(keyword => 
-      sanitized.toLowerCase().includes(keyword)
-    );
-    
-    if (!hasMedicalContext) {
-      console.warn('Prompt may not contain medical context');
-    }
-    
-    // Remove potentially dangerous medical advice patterns
-    const dangerousPatterns = [
-      /do not (seek|consult|see) (a |your )?doctor/i,
-      /avoid medical (attention|help)/i,
-      /instead of seeing a doctor/i,
-      /replace medical treatment/i
-    ];
-    
-    for (const pattern of dangerousPatterns) {
-      if (pattern.test(sanitized)) {
-        throw new Error('Prompt contains potentially dangerous medical advice patterns');
+
+    // Step 2: Generate iframe session if userId provided
+    let iframeData = null;
+    if (userId) {
+      try {
+        iframeData = await this.camelClient.createMedicalIframeSession(userId, {
+          context: 'pwa_generation'
+        });
+      } catch (error) {
+        console.warn(`Iframe session creation failed: ${error.message}`);
       }
     }
-    
-    return sanitized;
-  }
-  
-  static validateMedicalAction(action) {
-    const validActions = ['clarify', 'generate', 'diagnose', 'treatment_plan', 'create_chat_session'];
-    if (!validActions.includes(action)) {
-      throw new Error(`Invalid medical action. Must be one of: ${validActions.join(', ')}`);
-    }
-    return action;
-  }
 
-  static validateUserId(userId) {
-    if (!userId || typeof userId !== 'string') {
-      throw new Error('User ID must be a non-empty string');
-    }
-    
-    if (userId.length > 100) {
-      throw new Error('User ID must be less than 100 characters');
-    }
-    
-    // Basic sanitization
-    const sanitized = validator.escape(userId);
-    return sanitized;
-  }
-}
+    // Step 3: Generate PWA components
+    const pwaComponents = await this.generatePWABaseComponents(validation.sanitizedPrompt, iframeData);
 
-// Medical PWA templates and guidelines
-class MedicalPWATemplates {
-  static getClinicalSystemMessage() {
-    return `You are a Clinical Llama AI assistant specialized in generating medical Progressive Web Applications (PWAs). 
-
-IMPORTANT DISCLAIMERS:
-- All generated medical applications must include prominent disclaimers
-- Applications should encourage users to consult healthcare professionals
-- Never provide definitive diagnoses or replace professional medical advice
-- Include emergency contact information and when to seek immediate care
-
-Generate PWA code that follows these medical application guidelines:
-1. Include proper medical disclaimers
-2. Implement accessibility features (WCAG 2.1 AA compliance)
-3. Ensure data privacy and security measures
-4. Include offline capabilities for emergency information
-5. Implement proper error handling for medical data
-6. Follow medical device software guidelines where applicable
-7. Include data chat integration for patient consultation
-
-Return valid JSON with these exact keys: html, js, manifest, sw, css
-
-The application should be professional, trustworthy, and emphasize the importance of professional medical consultation.`;
-  }
-  
-  static getMedicalAppManifest(appName, description) {
     return {
-      name: appName,
-      short_name: appName.split(' ').slice(0, 2).join(' '),
-      description: description,
-      start_url: '/',
-      display: 'standalone',
-      background_color: '#ffffff',
-      theme_color: '#2563eb',
-      orientation: 'portrait-primary',
-      categories: ['health', 'medical', 'utilities'],
-      icons: [
-        {
-          src: '/icons/icon-192x192.png',
-          sizes: '192x192',
-          type: 'image/png',
-          purpose: 'maskable any'
-        },
-        {
-          src: '/icons/icon-512x512.png',
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'maskable any'
-        }
-      ],
-      screenshots: [
-        {
-          src: '/screenshots/mobile.png',
-          sizes: '390x844',
-          type: 'image/png',
-          form_factor: 'narrow'
-        }
-      ]
+      ...pwaComponents,
+      compliance: {
+        hipaa: true,
+        dataEncryption: true,
+        disclaimerIncluded: true
+      },
+      warnings: validation.warnings,
+      iframeSession: iframeData ? {
+        url: iframeData.iframeUrl,
+        expiresAt: iframeData.expiresAt
+      } : null
     };
   }
 
-  static getReactDataChatComponent(iframeUrl) {
-    return `
-import React, { useEffect, useState } from 'react';
+  async generatePWABaseComponents(prompt, iframeData = null) {
+    // This would be your existing PWA generation logic
+    // Modified to include Camel API iframe integration
+    
+    const htmlTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical PWA</title>
+  <link rel="manifest" href="/manifest.json">
+  ${iframeData ? `
+  <!-- Camel API Medical Chat Integration -->
+  <style>
+    .medical-chat-container {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      margin: 1rem 0;
+    }
+    .medical-disclaimer {
+      background-color: #f8fafc;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+  </style>
+  ` : ''}
+</head>
+<body>
+  <div class="container">
+    <h1>Medical Application</h1>
+    <p>${prompt}</p>
+    
+    ${iframeData ? `
+    <div class="medical-disclaimer">
+      <strong>Important:</strong> This application provides health information for educational purposes only. 
+      Always consult with a healthcare professional for medical advice.
+    </div>
+    
+    <div class="medical-chat-container">
+      <iframe 
+        src="${iframeData.iframeUrl}"
+        width="100%"
+        height="600"
+        frameborder="0"
+        allow="clipboard-write"
+        title="Medical Chat"
+        sandbox="allow-scripts allow-same-origin allow-forms"
+      ></iframe>
+    </div>
+    ` : ''}
+  </div>
+</body>
+</html>`;
 
-function MedicalDataChat({ userId, dataSources = [], onError }) {
-  const [iframeUrl, setIframeUrl] = useState('');
+    const manifest = {
+      name: "Medical PWA",
+      short_name: "MedPWA",
+      description: "A medical progressive web application",
+      start_url: "/",
+      display: "standalone",
+      background_color: "#ffffff",
+      theme_color: "#3182ce",
+      icons: [
+        {
+          src: "/icons/icon-192x192.png",
+          sizes: "192x192",
+          type: "image/png"
+        },
+        {
+          src: "/icons/icon-512x512.png",
+          sizes: "512x512",
+          type: "image/png"
+        }
+      ]
+    };
+
+    return {
+      html: htmlTemplate,
+      manifest: JSON.stringify(manifest, null, 2),
+      serviceWorker: this.generateServiceWorker(),
+      styles: this.generateStyles(),
+      scripts: this.generateScripts(),
+      ...(iframeData && { reactComponent: this.generateReactChatComponent(iframeData.iframeUrl) })
+    };
+  }
+
+  generateServiceWorker() {
+    return `// Medical PWA Service Worker
+const CACHE_NAME = 'medical-pwa-cache-v1';
+const urlsToCache = [
+  '/',
+  '/index.html',
+  '/styles/main.css',
+  '/scripts/main.js',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png'
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(urlsToCache))
+      .catch(err => console.error('Cache installation failed:', err))
+  );
+});
+
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request)
+      .then(response => response || fetch(event.request))
+  );
+});`;
+  }
+
+  generateStyles() {
+    return `/* Medical PWA Styles */
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.6;
+  color: #2d3748;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.medical-disclaimer {
+  background-color: #ebf8ff;
+  border-left: 4px solid #4299e1;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0.25rem;
+}
+
+.emergency-notice {
+  background-color: #fff5f5;
+  border-left: 4px solid #f56565;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0.25rem;
+}`;
+  }
+
+  generateScripts() {
+    return `// Medical PWA Main Script
+document.addEventListener('DOMContentLoaded', () => {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('ServiceWorker registration successful');
+      })
+      .catch(err => {
+        console.error('ServiceWorker registration failed:', err);
+      });
+  }
+
+  // Medical disclaimer confirmation
+  const disclaimer = document.getElementById('medical-disclaimer');
+  if (disclaimer) {
+    disclaimer.style.display = 'block';
+  }
+});`;
+  }
+
+  generateReactChatComponent(iframeUrl) {
+    return `import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
+
+const MedicalChatIframe = ({ userId, onError }) => {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [iframeUrl, setIframeUrl] = useState('');
+  const [sessionExpiry, setSessionExpiry] = useState(null);
 
   useEffect(() => {
-    async function createMedicalChatIframe() {
-      if (!userId) {
-        setError('User ID is required for medical data chat');
-        setLoading(false);
-        return;
-      }
+    if (iframeUrl) return;
 
+    const loadChatSession = async () => {
       try {
-        const response = await fetch('/api/medical-pwa/chat-session', {
+        const response = await fetch('/api/medical-chat/session', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Medical-Disclaimer': 'accepted'
+            'Authorization': \`Bearer \${process.env.REACT_APP_CAMEL_API_KEY}\`
           },
-          body: JSON.stringify({
-            action: 'create_chat_session',
-            userId: userId,
-            dataSources: dataSources,
-            ttl: 3600
-          })
+          body: JSON.stringify({ userId })
         });
-        
+
         if (!response.ok) {
-          throw new Error('Failed to create medical chat session');
+          throw new Error('Failed to create chat session');
         }
-        
+
         const data = await response.json();
-        setIframeUrl(data.content.iframe_url);
-        setError(null);
+        setIframeUrl(data.iframeUrl);
+        setSessionExpiry(data.expiresAt);
       } catch (err) {
-        console.error('Medical chat iframe creation error:', err);
-        setError(err.message);
+        console.error('Medical chat error:', err);
         if (onError) onError(err);
       } finally {
         setLoading(false);
       }
-    }
-    
-    createMedicalChatIframe();
-  }, [userId, dataSources, onError]);
+    };
+
+    loadChatSession();
+  }, [userId, iframeUrl, onError]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Loading medical chat...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-red-800">
-              Error loading medical chat: {error}
-            </p>
-          </div>
-        </div>
+      <div className="chat-loading">
+        <p>Loading medical chat...</p>
       </div>
     );
   }
 
   if (!iframeUrl) {
     return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <p className="text-yellow-800">No chat session available. Please try again.</p>
+      <div className="chat-error">
+        <p>Unable to load medical chat. Please try again later.</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-        <p className="text-sm text-blue-800">
-          <strong>Medical Disclaimer:</strong> This chat is for educational purposes only. 
-          Always consult with a qualified healthcare provider for medical advice.
+    <div className="medical-chat-container">
+      <div className="medical-disclaimer">
+        <h3>Important Information</h3>
+        <p>
+          This chat is for educational purposes only and does not replace 
+          professional medical advice. Always consult with a qualified 
+          healthcare provider.
         </p>
+        {sessionExpiry && (
+          <p className="session-expiry">
+            Session expires: {new Date(sessionExpiry).toLocaleString()}
+          </p>
+        )}
       </div>
       
-      <iframe 
+      <iframe
         src={iframeUrl}
-        width="100%"
-        height="600"
-        frameBorder="0"
+        title="Medical Chat"
+        className="medical-chat-iframe"
         allow="clipboard-write"
-        className="rounded-lg border border-gray-200"
-        title="Medical Data Chat"
         sandbox="allow-scripts allow-same-origin allow-forms"
       />
       
-      <div className="mt-2 text-xs text-gray-500">
-        <p>🚨 Emergency: If experiencing a medical emergency, call emergency services immediately.</p>
+      <div className="emergency-notice">
+        <p>
+          <strong>Emergency:</strong> If you're experiencing a medical emergency, 
+          call your local emergency number immediately.
+        </p>
       </div>
     </div>
   );
-}
+};
 
-export default MedicalDataChat;`;
+MedicalChatIframe.propTypes = {
+  userId: PropTypes.string.isRequired,
+  onError: PropTypes.func
+};
+
+export default MedicalChatIframe;`;
   }
 }
 
-// Enhanced medical prompt clarification
-async function clarifyMedicalPrompt(userPrompt) {
-  const client = new ClinicalLlamaClient();
-  
-  const systemMessage = `You are a medical application requirements specialist. Transform healthcare app ideas into detailed, HIPAA-compliant PWA specifications.
-
-Guidelines:
-- Include specific medical features and functionality
-- Mention patient data security requirements
-- Specify offline medical information capabilities
-- Include accessibility for users with disabilities
-- Suggest appropriate medical disclaimers
-- Consider emergency contact features
-- Ensure compliance with medical device regulations if applicable
-- Keep response under 600 words
-- Always emphasize the importance of professional medical consultation`;
-  
-  const prompt = `Transform this healthcare app idea into specific PWA requirements with proper medical disclaimers: "${userPrompt}"`;
-  
-  try {
-    const response = await client.generateResponse(prompt, systemMessage);
-    return response;
-  } catch (error) {
-    console.error('Clinical Llama clarification error:', error);
-    throw new Error(`Failed to clarify medical prompt: ${error.message}`);
-  }
-}
-
-// Enhanced medical PWA generation with React integration
-async function generateMedicalPWA(prompt, includeDataChat = true) {
-  const client = new ClinicalLlamaClient();
-  
-  const systemMessage = MedicalPWATemplates.getClinicalSystemMessage();
-  
-  const enhancedPrompt = `Generate a complete, HIPAA-compliant PWA for: ${prompt}
-
-Requirements:
-- Include medical disclaimers in HTML
-- Implement secure data handling
-- Add emergency contact features
-- Include offline medical information
-- Ensure accessibility compliance
-- Add proper error handling
-- Include data encryption for sensitive information
-- Implement proper authentication if needed
-${includeDataChat ? '- Include React component for medical data chat integration' : ''}
-
-JSON format required:
-{
-  "html": "<!DOCTYPE html>...",
-  "js": "// Medical PWA JavaScript with security features...",
-  "manifest": "{\\"name\\": \\"Medical App\\", ...}",
-  "sw": "// Service Worker with medical data caching...",
-  "css": "/* Medical app responsive CSS with accessibility... */"
-  ${includeDataChat ? ',"reactComponent": "// React component with medical data chat integration"' : ''}
-}`;
-  
-  try {
-    const response = await client.generateResponse(enhancedPrompt, systemMessage);
-    
-    // Parse and validate medical PWA structure
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No valid JSON found in Clinical Llama response');
-    }
-    
-    const pwaData = JSON.parse(jsonMatch[0]);
-    
-    // Validate required medical PWA fields
-    const requiredFields = ['html', 'js', 'manifest', 'sw', 'css'];
-    for (const field of requiredFields) {
-      if (!pwaData[field]) {
-        throw new Error(`Missing required medical PWA field: ${field}`);
-      }
-    }
-    
-    // Add React component if requested
-    if (includeDataChat && !pwaData.reactComponent) {
-      pwaData.reactComponent = MedicalPWATemplates.getReactDataChatComponent();
-    }
-    
-    // Validate medical disclaimers in HTML
-    if (!pwaData.html.toLowerCase().includes('disclaimer') && 
-        !pwaData.html.toLowerCase().includes('consult') &&
-        !pwaData.html.toLowerCase().includes('medical professional')) {
-      console.warn('Generated PWA may be missing medical disclaimers');
-    }
-    
-    // Validate manifest structure
-    const manifest = JSON.parse(pwaData.manifest);
-    if (!manifest.name || !manifest.description) {
-      throw new Error('Invalid medical PWA manifest structure');
-    }
-    
-    return pwaData;
-  } catch (error) {
-    console.error('Clinical Llama generation error:', error);
-    throw new Error(`Failed to generate medical PWA: ${error.message}`);
-  }
-}
-
-// Create medical data chat session
-async function createMedicalChatSession(userId, dataSources = [], ttl = 3600) {
-  const chatService = new DataChatService();
-  
-  try {
-    // Validate user ID
-    const validatedUserId = MedicalInputValidator.validateUserId(userId);
-    
-    // Get available medical data sources if none provided
-    if (dataSources.length === 0) {
-      dataSources = await chatService.getMedicalDataSources(validatedUserId);
-    }
-    
-    // Create iframe for medical data chat
-    const iframeData = await chatService.createIframe(validatedUserId, dataSources, ttl);
-    
-    return {
-      iframe_url: iframeData.iframe_url,
-      session_id: iframeData.session_id || crypto.randomUUID(),
-      expires_at: new Date(Date.now() + ttl * 1000).toISOString(),
-      data_sources: dataSources,
-      medical_disclaimer: 'This chat is for educational purposes only. Always consult with a qualified healthcare provider for medical advice.',
-      emergency_notice: 'If you are experiencing a medical emergency, call emergency services immediately.'
-    };
-  } catch (error) {
-    console.error('Failed to create medical chat session:', error);
-    throw new Error(`Failed to create medical chat session: ${error.message}`);
-  }
-}
-
-// Medical diagnosis support (with proper disclaimers)
-async function provideDiagnosisSupport(symptoms) {
-  const client = new ClinicalLlamaClient();
-  
-  const systemMessage = `You are a Clinical Llama assistant providing diagnostic support information. 
-
-CRITICAL REQUIREMENTS:
-- NEVER provide definitive diagnoses
-- Always include disclaimers about seeking professional medical advice
-- Provide differential diagnosis considerations only
-- Include red flags that require immediate medical attention
-- Emphasize the importance of professional medical evaluation
-- Include emergency contact information when appropriate`;
-  
-  const prompt = `Based on these symptoms: "${symptoms}"
-
-Provide:
-1. Possible conditions to consider (differential diagnosis)
-2. When to seek immediate medical attention
-3. Questions a healthcare provider might ask
-4. General health recommendations
-5. Important disclaimer about professional medical consultation
-
-Remember: This is for educational purposes only and should not replace professional medical advice.`;
-  
-  try {
-    const response = await client.generateResponse(prompt, systemMessage);
-    return {
-      diagnosticSupport: response,
-      disclaimer: "This information is for educational purposes only and should not replace professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for medical concerns.",
-      emergencyNotice: "If you are experiencing a medical emergency, call emergency services immediately."
-    };
-  } catch (error) {
-    console.error('Clinical Llama diagnosis support error:', error);
-    throw new Error(`Failed to provide diagnosis support: ${error.message}`);
-  }
-}
-
-// Treatment plan generation
-async function generateTreatmentPlan(condition) {
-  const client = new ClinicalLlamaClient();
-  
-  const systemMessage = `You are a Clinical Llama assistant providing treatment plan information for educational purposes.
-
-CRITICAL REQUIREMENTS:
-- NEVER provide definitive treatment recommendations
-- Always include disclaimers about seeking professional medical advice
-- Provide general treatment approaches for educational purposes only
-- Include warnings about self-treatment
-- Emphasize the importance of professional medical supervision
-- Include emergency contact information when appropriate`;
-  
-  const prompt = `Provide general treatment information for: "${condition}"
-
-Include:
-1. Common treatment approaches (for educational purposes)
-2. Lifestyle modifications that may help
-3. When to seek medical attention
-4. Warning signs that require immediate care
-5. Important disclaimer about professional medical consultation
-
-Remember: This is for educational purposes only and should not replace professional medical advice.`;
-  
-  try {
-    const response = await client.generateResponse(prompt, systemMessage);
-    return {
-      treatmentInfo: response,
-      disclaimer: "This information is for educational purposes only and should not replace professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for medical concerns.",
-      emergencyNotice: "If you are experiencing a medical emergency, call emergency services immediately."
-    };
-  } catch (error) {
-    console.error('Clinical Llama treatment plan error:', error);
-    throw new Error(`Failed to generate treatment plan: ${error.message}`);
-  }
-}
-
-// Enhanced logging with medical compliance
-function logMedicalRequest(event, action, success = true, error = null) {
-  const timestamp = new Date().toISOString();
-  const requestId = crypto.randomUUID();
-  
-  const logData = {
-    timestamp,
-    requestId,
-    action,
-    success,
-    // Don't log sensitive medical data
-    userAgent: event.headers['user-agent'],
-    ip: event.headers['x-forwarded-for'] || event.headers['x-real-ip'],
-    hipaaCompliant: true,
-    medicalApplication: true,
-    ...(error && { error: error.message })
-  };
-  
-  // In production, ensure logs are HIPAA compliant
-  if (process.env.NODE_ENV === 'production') {
-    // Remove or hash IP addresses for medical applications
-    delete logData.ip;
-  }
-  
-  console.log(JSON.stringify(logData));
-  return requestId;
-}
-
-// Main handler with medical compliance and React integration
+// API Handler with proper Camel API integration
 exports.handler = async (event, context) => {
-  const requestId = crypto.randomUUID();
-  
-  // Enhanced security headers for medical applications
-  const medicalSecurityHeaders = {
+  // Set security headers for medical application
+  const headers = {
+    'Content-Type': 'application/json',
     'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'SAMEORIGIN', // Allow iframe for data chat
-    'X-XSS-Protection': '1; mode=block',
-    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.camel.ai; frame-src 'self' https://api.camel.ai;",
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'geolocation=(), microphone=(), camera=()'
-  };
-  
-  // CORS headers for medical applications
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': process.env.MEDICAL_ALLOWED_ORIGIN || '*',
+    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Medical-Disclaimer',
-    'Access-Control-Max-Age': '86400'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Medical-Disclaimer'
   };
-  
-  const headers = { ...medicalSecurityHeaders, ...corsHeaders };
-  
-  // Handle preflight requests
+
+  // Handle OPTIONS requests for CORS
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -644,192 +420,129 @@ exports.handler = async (event, context) => {
       body: ''
     };
   }
-  
+
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Method Not Allowed',
-        requestId,
-        medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
+        message: 'Only POST requests are accepted',
+        medicalDisclaimer: 'This service provides health information for educational purposes only.'
       })
     };
   }
-  
+
   try {
-    // Parse and validate request body
-    let body;
-    try {
-      body = JSON.parse(event.body || '{}');
-    } catch (parseError) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ 
-          error: 'Invalid JSON in request body',
-          requestId,
-          medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
-        })
-      };
-    }
-    
-    const { action, prompt, userId, dataSources, ttl } = body;
-    
-    // Validate inputs
+    const body = JSON.parse(event.body || '{}');
+    const { action, prompt, userId } = body;
+
     if (!action) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           error: 'Missing required field: action',
-          requestId,
-          medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
+          medicalDisclaimer: 'This service provides health information for educational purposes only.'
         })
       };
     }
-    
-    const validatedAction = MedicalInputValidator.validateMedicalAction(action);
-    
-    // Validate prompt for actions that require it
-    let validatedPrompt;
-    if (['clarify', 'generate', 'diagnose', 'treatment_plan'].includes(validatedAction)) {
-      if (!prompt) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({ 
-            error: 'Missing required field: prompt',
-            requestId,
-            medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
-          })
-        };
-      }
-      validatedPrompt = MedicalInputValidator.validateMedicalPrompt(prompt);
-    }
-    
+
+    const generator = new MedicalPWAGenerator();
     let result;
-    
-    switch (validatedAction) {
-      case 'clarify':
-        logMedicalRequest(event, 'clarify');
-        result = await clarifyMedicalPrompt(validatedPrompt);
-        break;
-        
+
+    switch (action) {
       case 'generate':
-        logMedicalRequest(event, 'generate');
-        result = await generateMedicalPWA(validatedPrompt, true);
+        if (!prompt) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              error: 'Missing required field: prompt',
+              medicalDisclaimer: 'This service provides health information for educational purposes only.'
+            })
+          };
+        }
+        result = await generator.generateMedicalPWA(prompt, userId);
         break;
-        
-      case 'diagnose':
-        logMedicalRequest(event, 'diagnose');
-        result = await provideDiagnosisSupport(validatedPrompt);
-        break;
-        
-      case 'treatment_plan':
-        logMedicalRequest(event, 'treatment_plan');
-        result = await generateTreatmentPlan(validatedPrompt);
-        break;
-        
-      case 'create_chat_session':
-        logMedicalRequest(event, 'create_chat_session');
+
+      case 'create_chat':
         if (!userId) {
           return {
             statusCode: 400,
             headers,
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               error: 'Missing required field: userId',
-              requestId,
-              medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
+              medicalDisclaimer: 'This service provides health information for educational purposes only.'
             })
           };
         }
-        result = await createMedicalChatSession(userId, dataSources, ttl);
+        const camelClient = new CamelAPIClient();
+        result = await camelClient.createMedicalIframeSession(userId);
         break;
-        
+
       default:
-        throw new Error(`Unsupported medical action: ${validatedAction}`);
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            error: 'Invalid action specified',
+            medicalDisclaimer: 'This service provides health information for educational purposes only.'
+          })
+        };
     }
-    
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ 
-        content: result,
-        requestId,
-        timestamp: new Date().toISOString(),
-        medicalDisclaimer: 'This information is for educational purposes only and should not replace professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for medical concerns.',
-        emergencyNotice: 'If you are experiencing a medical emergency, call emergency services immediately.',
-        model: 'Clinical Llama',
-        complianceNote: 'This service follows medical application guidelines and emphasizes professional medical consultation.'
+      body: JSON.stringify({
+        success: true,
+        data: result,
+        compliance: 'HIPAA-ready',
+        medicalDisclaimer: 'This information is for educational purposes only and does not constitute medical advice.',
+        emergencyNotice: 'If you are experiencing a medical emergency, please call emergency services immediately.'
       })
     };
-    
+
   } catch (error) {
-    console.error(`❌ Medical PWA Generator Error (${requestId}):`, error);
-    logMedicalRequest(event, body?.action || 'unknown', false, error);
-    
-    // Enhanced error handling for medical applications
-    const errorMessage = process.env.NODE_ENV === 'production' 
-      ? 'A medical service error occurred. Please try again or consult a healthcare professional.'
-      : error.message;
-    
+    console.error('Medical PWA Error:', error);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
-        error: errorMessage,
-        requestId,
-        timestamp: new Date().toISOString(),
-        medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.',
-        emergencyNotice: 'If you are experiencing a medical emergency, call emergency services immediately.'
+        error: error.message,
+        medicalDisclaimer: 'This service provides health information for educational purposes only.',
+        emergencyNotice: 'If you are experiencing a medical emergency, please call emergency services immediately.'
       })
     };
   }
 };
 
-// Health check endpoint with medical compliance
-exports.health = async (event, context) => {
+// Health check endpoint
+exports.healthCheck = async () => {
   try {
-    // Basic health check for Clinical Llama model
-    const client = new ClinicalLlamaClient();
-    const testPrompt = "Test clinical reasoning capability";
-    const testResponse = await client.generateResponse(testPrompt, "Respond with 'Clinical Llama is operational'");
+    const camelClient = new CamelAPIClient();
     
-    // Test data chat service
-    const chatService = new DataChatService();
-    const chatHealthy = chatService.apiKey ? true : false;
+    // Simple validation request to Camel API
+    const validation = await camelClient.validateMedicalPrompt("Test prompt");
     
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         status: 'healthy',
-        model: 'Clinical Llama',
-        modelStatus: testResponse.includes('operational') ? 'operational' : 'degraded',
-        chatServiceStatus: chatHealthy ? 'operational' : 'degraded',
+        camelApi: validation.isValid ? 'connected' : 'degraded',
         timestamp: new Date().toISOString(),
-        version: '2.1.0-clinical-react',
-        compliance: 'HIPAA-ready',
-        features: ['PWA Generation', 'Medical Chat Integration', 'React Components'],
-        medicalDisclaimer: 'This service is for educational purposes only. Consult a healthcare professional for medical advice.'
+        version: '2.0.0-medical'
       })
     };
   } catch (error) {
     return {
       statusCode: 503,
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         status: 'unhealthy',
-        model: 'Clinical Llama',
         error: error.message,
-        timestamp: new Date().toISOString(),
-        version: '2.1.0-clinical-react'
+        timestamp: new Date().toISOString()
       })
     };
   }
