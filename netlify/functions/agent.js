@@ -12,7 +12,7 @@ require('dotenv').config();
 class CamelAPIClient {
   constructor() {
     this.apiKey = process.env.CAMEL_API_KEY;
-    this.baseUrl = process.env.CAMEL_API_BASE_URL || 'https://api.camel.ai/v1';
+    this.baseUrl = process.env.CAMEL_API_BASE_URL || 'https://api.camel.ai/api/v1/';
     this.timeout = 30000; // 30 seconds timeout
   }
 
