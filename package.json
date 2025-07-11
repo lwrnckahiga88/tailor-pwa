@@ -1,35 +1,63 @@
 {
-  "name": "my-netlify-pwa-agent",
+  "name": "Stone-ai-pwa-agent",
   "version": "1.0.0",
-  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
-  "main": "netlify/functions/pwa-agent.js",
+  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions and CAMEL AI API",
+  "main": "netlify/functions/agent.js",
   "scripts": {
     "dev": "netlify dev",
     "build": "mkdir -p dist && cp -r Public/* dist/",
-    "start": "netlify dev"
+    "start": "netlify dev",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint netlify/functions/**/*.js",
+    "format": "prettier --write netlify/functions/**/*.js Public/**/*.{html,css,js}",
+    "clean": "rm -rf dist && rm -rf .netlify"
   },
   "dependencies": {
     "axios": "^1.6.8",
     "archiver": "^5.3.1",
     "dotenv": "^16.3.1",
-    "express": "^4.19.2",
     "form-data": "^4.0.0",
-    "ipfs-http-client": "^60.0.0",
-    "openai": "^4.8.0"
+    "ipfs-http-client": "^60.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "@netlify/functions": "^2.6.0"
+  },
   "engines": {
     "node": ">=18"
   },
   "keywords": [
     "pwa",
-    "openai",
     "netlify",
     "serverless",
-    "express",
     "ai",
-    "generator"
+    "generator",
+    "camel-ai",
+    "medical-apps",
+    "progressive-web-app"
   ],
-  "author": "YourName",
-  "license": "MIT"
+  "author": "Lawrence Kahiga (stone)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lwrnckahiga88@github.com/my-netlify-pwa-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lwrnckahiga88@github.com/my-netlify-pwa-agent/issues"
+  },
+  "homepage": "https://github.com/lwrnckahiga88@github.com/my-netlify-pwa-agent#readme",
+  "netlify": {
+    "functions": {
+      "pwa-agent": {
+        "timeout": 30,
+        "memorySize": 512
+      }
+    }
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
 }
