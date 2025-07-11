@@ -1,55 +1,35 @@
-// netlify/functions/pwa-agent.js
-// Minimal version to test if function deploys correctly
-
-exports.handler = async (event, context) => {
-  // Handle preflight requests
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: ''
-    };
-  }
-
-  // Only allow POST requests
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ error: "Method Not Allowed" }),
-    };
-  }
-
-  try {
-    // Test response
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        message: "Function is working!",
-        timestamp: new Date().toISOString(),
-        method: event.httpMethod,
-        path: event.path
-      }),
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ error: error.message }),
-    };
-  }
-};
+{
+  "name": "my-netlify-pwa-agent",
+  "version": "1.0.0",
+  "description": "AI-powered Progressive Web App (PWA) generator using Netlify Functions, Express, and OpenAI",
+  "main": "netlify/functions/pwa-agent.js",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "mkdir -p dist && cp -r Public/* dist/",
+    "start": "netlify dev"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "archiver": "^5.3.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "form-data": "^4.0.0",
+    "ipfs-http-client": "^60.0.0",
+    "openai": "^4.8.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "pwa",
+    "openai",
+    "netlify",
+    "serverless",
+    "express",
+    "ai",
+    "generator"
+  ],
+  "author": "YourName",
+  "license": "MIT"
+}
