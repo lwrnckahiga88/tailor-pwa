@@ -1,15 +1,38 @@
+# netlify.toml
 [build]
-  publish = "public"
-  functions = "netlify/functions"
-  command = "npm install"
+  publish = "dist"
+  command = "npm run build"
 
-[dev]
-  functions = "netlify/functions"
-  publish = "public"
-  port = 8888
-  autoLaunch = true
+[functions]
+  directory = "netlify/functions"
 
+# Function-specific settings
+[[functions]]
+  name = "pwa-agent"
+  timeout = 30
+  memory = 512
+
+# Headers for CORS
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Redirects for function endpoints
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  conditions = {Role = ["admin"], Country = ["US"]}
+
+
+
+
