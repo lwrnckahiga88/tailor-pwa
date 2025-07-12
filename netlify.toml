@@ -7,10 +7,7 @@
   directory = "netlify/functions"
 
 # Function-specific settings
-[[functions]]
-  name = "agent"
-  timeout = 30
-  memory = 512
+
 
 # Headers for CORS
 [[headers]]
