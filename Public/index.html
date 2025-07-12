@@ -2,72 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI PWA Generator</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="style.css" />
-  <link rel="icon" type="image/png" href="icon.png" />
+  <title>Clinical AI Assistant</title>
+  <script defer src="app.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
 </head>
-<body>
-  <main>
-    <h1>🧠 AI PWA Generator</h1>
-    <p>Describe the app you want and let the AI generate a PWA.</p>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-xl mx-auto bg-white rounded shadow p-6">
+    <h1 class="text-2xl font-bold mb-4">Clinical AI Assistant</h1>
 
-    <textarea id="prompt" rows="5" placeholder="e.g., A weather app that shows local forecasts and works offline..."></textarea>
-    <button id="generateBtn">⚙️ Generate PWA</button>
+    <div id="symptom-list" class="mb-4">
+      <div class="flex space-x-2 mb-2">
+        <input type="text" placeholder="Symptom name" class="symptom-name border p-2 w-1/2" />
+        <input type="text" placeholder="Symptom value (Yes/No)" class="symptom-value border p-2 w-1/2" />
+      </div>
+    </div>
 
-    <pre id="log">🔍 Waiting for your prompt...</pre>
-  </main>
+    <button onclick="addSymptomField()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Symptom</button>
+    <button onclick="submitSymptoms()" class="bg-green-600 text-white px-4 py-2 rounded ml-2">Analyze</button>
 
-  <script>
-    const promptInput = document.getElementById("prompt");
-    const generateBtn = document.getElementById("generateBtn");
-    const log = document.getElementById("log");
-
-    generateBtn.addEventListener("click", async () => {
-      const userPrompt = promptInput.value.trim();
-      if (!userPrompt) return alert("Please enter a prompt first.");
-
-      log.textContent = "🧠 Clarifying your idea...";
-
-      try {
-        // Step 1: Clarify
-        const clarifyRes = await fetch("/.netlify/functions/agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "clarify", prompt: userPrompt })
-        });
-        const clarifyData = await clarifyRes.json();
-        const refinedPrompt = clarifyData.content;
-
-        log.textContent = "🛠 Generating PWA files...\n\n" + refinedPrompt;
-
-        // Step 2: Generate
-        const generateRes = await fetch("/.netlify/functions/agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "generate", prompt: refinedPrompt })
-        });
-        const generateData = await generateRes.json();
-        const files = generateData.content;
-
-        // Show a simple log (or extend this to download or preview)
-        log.textContent = `✅ Generated PWA Files:
-- index.html
-- app.js
-- manifest.json
-- service-worker.js
-- style.css
-
-📄 index.html preview:
-
-${files.html.slice(0, 400)}...
-`;
-      } catch (err) {
-        log.textContent = `❌ Error: ${err.message}`;
-        console.error(err);
-      }
-    });
-  </script>
+    <div id="result" class="mt-6 text-sm whitespace-pre-wrap"></div>
+  </div>
 </body>
 </html>
