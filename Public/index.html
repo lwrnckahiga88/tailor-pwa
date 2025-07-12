@@ -22,5 +22,10 @@
 
     <div id="result" class="mt-6 text-sm whitespace-pre-wrap"></div>
   </div>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js');
+  }
+  </script>
 </body>
 </html>
